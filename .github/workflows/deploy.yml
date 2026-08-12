@@ -6,6 +6,10 @@ on:
       - devs
       - release
       - main
+  pull_request:
+    branches:
+      - release
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -34,57 +38,3 @@ jobs:
         run: |
           docker compose -f docker-compose.yml config > /dev/null
           echo "Docker Compose file is valid."
-
-  deploy-devs:
-    name: Deploy Devs to Port 8081
-    runs-on: ubuntu-latest
-
-    needs: validate
-
-    if: github.ref == 'refs/heads/devs'
-
-    uses: ./.github/workflows/deploy-server.yml
-
-    with:
-      deploy_path: /opt/paynext-dev
-      compose_project_name: paynext-dev
-      web_port: "8081"
-      environment_name: development
-
-    secrets: inherit
-
-  deploy-release:
-    name: Deploy Release to Port 8082
-    runs-on: ubuntu-latest
-
-    needs: validate
-
-    if: github.ref == 'refs/heads/release'
-
-    uses: ./.github/workflows/deploy-server.yml
-
-    with:
-      deploy_path: /opt/paynext-release
-      compose_project_name: paynext-release
-      web_port: "8082"
-      environment_name: staging
-
-    secrets: inherit
-
-  deploy-production:
-    name: Deploy Production to Port 80
-    runs-on: ubuntu-latest
-
-    needs: validate
-
-    if: github.ref == 'refs/heads/main'
-
-    uses: ./.github/workflows/deploy-server.yml
-
-    with:
-      deploy_path: /opt/paynext
-      compose_project_name: paynext
-      web_port: "80"
-      environment_name: production
-
-    secrets: inherit
