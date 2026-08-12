@@ -1,0 +1,12 @@
+services:
+  web:
+    build: ./web
+    container_name: paynext-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

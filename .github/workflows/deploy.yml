@@ -1,0 +1,61 @@
+name: Deploy payNEXT to Server
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  SERVER_IP: ${{ secrets.SERVER_IP }}
+  SSH_USER: ${{ secrets.SSH_USER }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+
+      - name: Create deployment folder on server
+        run: |
+          ssh "$SSH_USER@$SERVER_IP" "mkdir -p /opt/paynext"
+
+      - name: Package application files
+        run: |
+          tar --exclude='./.git' --exclude='./.github' -czf paynext.tgz docker-compose.yml web
+
+      - name: Copy package to server
+        run: |
+          scp paynext.tgz "$SSH_USER@$SERVER_IP":/tmp/paynext.tgz
+
+      - name: Deploy using Docker
+        run: |
+          ssh "$SSH_USER@$SERVER_IP" << 'EOF'
+          set -e
+
+          cd /opt/paynext
+
+          docker compose down --remove-orphans || true
+
+          rm -rf web docker-compose.yml
+
+          tar -xzf /tmp/paynext.tgz
+
+          rm /tmp/paynext.tgz
+
+          docker compose up -d --build
+
+          docker image prune -f
+          EOF
