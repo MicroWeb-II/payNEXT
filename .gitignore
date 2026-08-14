@@ -6,4 +6,7 @@ node_modules/
 .DS_Store
 dist/
 build/get-docker.sh
+
+# Block all .env files everywhere
+**/.env
 .env
