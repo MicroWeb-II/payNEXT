@@ -6,6 +6,8 @@ const authRoutes = require("./authRoutes");
 const walletRoutes = require("./walletRoutes");
 const moneyRoutes = require("./moneyRoutes");
 const requestRoutes = require("./requestRoutes");
+const transactionRoutes = require("./transactionRoutes");
+const merchantRoutes = require("./merchantRoutes");
 
 router.get("/health", (req, res) =>
   res.json({
@@ -20,5 +22,9 @@ router.use("/auth", authRoutes);
 router.use("/wallets", walletRoutes);
 router.use("/transfers", moneyRoutes);
 router.use("/payment-requests", requestRoutes);
+
+// Mount your new routes
+router.use("/history", transactionRoutes);
+router.use("/merchants", merchantRoutes);
 
 module.exports = router;

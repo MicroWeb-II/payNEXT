@@ -94,3 +94,27 @@ CREATE INDEX idx_transfers_from_wallet ON transfers(from_wallet_id);
 CREATE INDEX idx_transfers_to_wallet ON transfers(to_wallet_id);
 CREATE INDEX idx_payment_requests_requester ON payment_requests(requester_wallet_id);
 CREATE INDEX idx_gateway_wallet ON gateway_transactions(wallet_id);
+
+-- 7. MERCHANTS
+CREATE TABLE merchants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    api_key VARCHAR(255) UNIQUE NOT NULL,
+    status user_status DEFAULT 'active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. MERCHANT PAYMENTS
+CREATE TABLE merchant_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+    wallet_id UUID NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    amount NUMERIC(15, 2) NOT NULL CHECK (amount > 0),
+    currency VARCHAR(3) NOT NULL,
+    status transaction_status DEFAULT 'completed',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_merchant_payments_merchant ON merchant_payments(merchant_id);
+CREATE INDEX idx_merchant_payments_wallet ON merchant_payments(wallet_id);
