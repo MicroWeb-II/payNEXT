@@ -34,6 +34,9 @@ jobs:
           test -f web/public/index.html
           echo "All required files exist."
 
+      - name: Create dummy .env file
+        run: echo "JWT_SECRET=super_secret_test_key" > .env
+
       - name: Validate Docker Compose file
         run: |
           docker compose -f docker-compose.yml config > /dev/null
