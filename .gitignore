@@ -10,3 +10,5 @@ build/get-docker.sh
 # Block all .env files everywhere
 **/.env
 .env
+.agents
+skills-lock.json
