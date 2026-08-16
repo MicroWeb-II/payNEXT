@@ -1,6 +1,12 @@
+<div align="center">
+
+<img src="assets/payNEXT_logo.png" alt="Project Logo" width="180"/>
+
 # payNEXT
 
-payNEXT is a digital wallet platform.
+**payNEXT is a digital wallet platform.**
+
+</div>
 
 ## Local Development
 
@@ -21,3 +27,5 @@ When changes are pushed to the `main` branch, GitHub Actions will:
 ```text
 http://104.214.170.158
 ```
+
+payNEXT - Powering Your Next Move. Next Generation Digital Wallet.
