@@ -1,8 +1,9 @@
 module.exports = (err, req, res, next) => {
-  console.error(err);
+  console.error(err.stack);
   const status = err.status || 500;
   res.status(status).json({
     success: false,
     error: status === 500 ? "Internal server error" : err.message,
+    stack: err.stack,
   });
 };
