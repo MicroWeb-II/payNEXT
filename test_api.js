@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:3000/api/v1";
+const API_URL = "http://104.214.170.158/api/v1";
 
 async function runTests() {
   console.log("🚀 Starting Automated API Tests...\n");
@@ -17,6 +17,9 @@ async function runTests() {
       })
     });
     console.log(`   Status: ${userA_res.status}`);
+    if (userA_res.status === 500) {
+      console.log(`   ❌ ERROR: ${await userA_res.clone().text()}`);
+    }
 
     // 2. Login User A
     console.log("2️⃣  Logging in User A...");

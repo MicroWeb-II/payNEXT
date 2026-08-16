@@ -101,6 +101,10 @@ jobs:
 
           cd /opt/paynext
 
+          echo "Generating production .env file..."
+          echo "JWT_SECRET=super_secret_production_key" > .env
+          echo "NODE_ENV=production" >> .env
+
           docker compose down --remove-orphans || true
 
           rm -rf web docker-compose.yml
