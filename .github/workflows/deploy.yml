@@ -38,6 +38,19 @@ jobs:
         run: |
           docker compose -f docker-compose.yml config > /dev/null
           echo "Docker Compose file is valid."
+
+      - name: Boot up API for Testing
+        run: docker compose up -d --build
+
+      - name: Wait for API to be healthy
+        run: |
+          echo "Waiting for API and Database to start..."
+          sleep 15
+          docker ps -a
+          docker logs paynext-api
+
+      - name: Run Automated API Tests
+        run: node test_api.js
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
