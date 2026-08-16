@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   api:
-    build: ./api
+    build: ./server
     container_name: paynext-api
     restart: unless-stopped
     ports:
@@ -33,7 +33,7 @@ services:
       retries: 20
 
   web:
-    build: ./web
+    build: ./client
     container_name: paynext-web
     restart: unless-stopped
     ports:
