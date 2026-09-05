@@ -111,4 +111,40 @@ docker compose down -v
 
 Use the `-v` option only when you want to remove the stored local database data.
 
+## 🔐 Authentication & Authorization (Lab 05)
+
+### Registration (`POST /api/v1/auth/register`)
+Request:
+```json
+{ "email": "user@test.com", "password": "password123", "fullName": "Test User" }
+```
+Response (`201 Created`):
+```json
+{ "success": true, "message": "Registered successfully", "data": { "token": "jwt_string..." } }
+```
+
+### Login (`POST /api/v1/auth/login`)
+Request:
+```json
+{ "email": "user@test.com", "password": "password123" }
+```
+Response (`200 OK`):
+```json
+{ "success": true, "message": "Login successful", "data": { "token": "jwt_string..." } }
+```
+
+### Admin Restricted Endpoint (`GET /api/v1/auth/users`)
+Requires: `Authorization: Bearer <ADMIN_TOKEN>`
+Response (`200 OK`):
+```json
+{
+  "success": true,
+  "data": [
+    { "id": 1, "email": "admin@test.com", "role": "admin" },
+    { "id": 2, "email": "user@test.com", "role": "user" }
+  ]
+}
+```
+If accessed with a standard user token, returns `403 Forbidden`.
+
 payNEXT - Powering Your Next Move. Next Generation Digital Wallet.

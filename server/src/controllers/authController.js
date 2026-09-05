@@ -66,5 +66,13 @@ const me = async (req, res, next) => {
     next(e);
   }
 };
+const getAllUsers = async (req, res, next) => {
+  try {
+    const users = await userModel.findAll();
+    res.json({ success: true, data: users });
+  } catch (e) {
+    next(e);
+  }
+};
 
-module.exports = { register, login, me };
+module.exports = { register, login, me, getAllUsers };

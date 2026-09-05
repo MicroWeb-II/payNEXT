@@ -1,4 +1,5 @@
-const API_URL = "http://104.214.170.158/api/v1";
+const { execSync } = require('child_process');
+const API_URL = "http://localhost:3000/api/v1";
 
 async function runTests() {
   console.log("🚀 Starting Automated API Tests...\n");
@@ -148,6 +149,50 @@ async function runTests() {
     } else {
       console.log("   ❌ FAILED:", transferData);
     }
+
+    console.log("\n-----------------------------------\n");
+
+    // 8. Auth Tests
+    console.log("🛡️  Testing Authentication & Authorization...");
+    
+    // Missing Token
+    const missingTokenRes = await fetch(`${API_URL}/auth/users`);
+    console.log(`   Missing Token: ${missingTokenRes.status === 401 ? '✅' : '❌'}`);
+
+    // Invalid Token
+    const invalidTokenRes = await fetch(`${API_URL}/auth/users`, { headers: { "Authorization": "Bearer fake_token" } });
+    console.log(`   Invalid Token: ${invalidTokenRes.status === 401 ? '✅' : '❌'}`);
+
+    // RBAC: Standard User attempting to access Admin endpoint
+    const rbacRes = await fetch(`${API_URL}/auth/users`, { headers: { "Authorization": `Bearer ${tokenA}` } });
+    console.log(`   Standard User Access (Expect 403): ${rbacRes.status === 403 ? '✅' : '❌'}`);
+
+    // Create Admin User
+    const adminEmail = `admin_${Date.now()}@test.com`;
+    await fetch(`${API_URL}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: adminEmail, password: "password123", fullName: "Admin Tester" })
+    });
+
+    // Promote to Admin via DB
+    try {
+      execSync(`docker exec paynext-db psql -U postgres -d paynext_db -c "UPDATE users SET role = 'admin' WHERE email = '${adminEmail}';"`);
+    } catch(e) {
+      console.log("   (Skipping DB promote, docker not available locally)");
+    }
+
+    // Login as Admin
+    const loginAdmin_res = await fetch(`${API_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: adminEmail, password: "password123" })
+    });
+    const tokenAdmin = (await loginAdmin_res.json()).data.token;
+
+    // RBAC: Admin User attempting to access Admin endpoint
+    const adminAccessRes = await fetch(`${API_URL}/auth/users`, { headers: { "Authorization": `Bearer ${tokenAdmin}` } });
+    console.log(`   Admin Access (Expect 200): ${adminAccessRes.status === 200 ? '✅' : '❌'}`);
 
   } catch (err) {
     console.error("Test script crashed:", err);
