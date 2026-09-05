@@ -1,9 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const { body, validationResult } = require("express-validator");
-
 const authLimiter = require("../middleware/rateLimiter");
-const { login, register, me } = require("../controllers/authController");
+const { register, login, me, getAllUsers } = require("../controllers/authController");
+const { requireAuth, requireRole } = require("../middleware/auth");
 
 // Helper middleware to check for validation errors
 const validate = (req, res, next) => {
@@ -53,5 +53,8 @@ router.post(
   validate,
   register,
 );
+
+router.get("/me", requireAuth, me);
+router.get("/users", requireAuth, requireRole("admin"), getAllUsers);
 
 module.exports = router;

@@ -90,5 +90,13 @@ const me = async (req, res) => {
     res.status(500).json({ success: false, error: "Server error" });
   }
 };
+const getAllUsers = async (req, res, next) => {
+  try {
+    const users = await userModel.findAll();
+    res.json({ success: true, data: users });
+  } catch (e) {
+    next(e);
+  }
+};
 
-module.exports = { register, login, me };
+module.exports = { register, login, me, getAllUsers };
