@@ -88,7 +88,7 @@ jobs:
 
       - name: Package application files
         run: |
-          tar --exclude='./.git' --exclude='./.github' -czf paynext.tgz docker-compose.yml client server db
+          tar --exclude='./.git' --exclude='./.github' -czf paynext.tgz docker-compose.yml Caddyfile client server db
 
       - name: Copy package to server
         run: |
