@@ -1,0 +1,94 @@
+PAYNEXT PRODUCTION API - POSTMAN TESTING GUIDE
+==============================================
+Base URL: http://104.214.170.158
+
+---
+STEP 1: CREATE SENDER (USER A)
+---
+Method: POST
+URL: http://104.214.170.158/api/v1/auth/register
+Body (Raw -> JSON):
+{
+    "email": "sender@example.com",
+    "password": "password123",
+    "fullName": "Sender Tester",
+    "phone": "01712345678"
+}
+
+---
+STEP 2: LOGIN SENDER & GET TOKEN
+---
+Method: POST
+URL: http://104.214.170.158/api/v1/auth/login
+Body (Raw -> JSON):
+{
+    "email": "sender@example.com",
+    "password": "password123"
+}
+-> ACTION: Copy the "token" from the response.
+
+---
+STEP 3: GET SENDER WALLET ID & BALANCE
+---
+Method: GET
+URL: http://104.214.170.158/api/v1/wallets
+Auth Tab: Bearer Token -> (Paste Token A here)
+-> ACTION: Copy the "id" from the response.
+
+---
+STEP 4: ADD MONEY TO SENDER WALLET
+---
+Method: POST
+URL: http://104.214.170.158/api/v1/wallets/PASTE_SENDER_ID_HERE/top-up
+Auth Tab: Bearer Token -> (Paste Token A here)
+Body (Raw -> JSON):
+{
+    "amount": 100.00
+}
+
+---
+STEP 5: CREATE RECEIVER (USER B)
+---
+Method: POST
+URL: http://104.214.170.158/api/v1/auth/register
+Body (Raw -> JSON):
+{
+    "email": "receiver@example.com",
+    "password": "password123",
+    "fullName": "Receiver Tester",
+    "phone": "01787654321"
+}
+
+---
+STEP 6: LOGIN RECEIVER & GET TOKEN
+---
+Method: POST
+URL: http://104.214.170.158/api/v1/auth/login
+Body (Raw -> JSON):
+{
+    "email": "receiver@example.com",
+    "password": "password123"
+}
+-> ACTION: Copy the "token" from the response.
+
+---
+STEP 7: GET RECEIVER WALLET NUMBER
+---
+Method: GET
+URL: http://104.214.170.158/api/v1/wallets
+Auth Tab: Bearer Token -> (Paste Token B here)
+-> ACTION: Copy the "wallet_number" from the response. (It looks like PAYNX-123456)
+
+---
+STEP 8: SEND MONEY!
+---
+Method: POST
+URL: http://104.214.170.158/api/v1/transfers
+Auth Tab: Bearer Token -> (Paste Token A here! User A is sending the money)
+Body (Raw -> JSON):
+{
+    "fromWalletId": "PASTE_SENDER_ID_HERE",
+    "toWalletNumber": "PASTE_RECEIVER_WALLET_NUMBER_HERE",
+    "amount": 50.00,
+    "note": "Production test transfer!"
+}

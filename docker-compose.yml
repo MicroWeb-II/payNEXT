@@ -41,8 +41,6 @@ services:
     build: ./client
     container_name: paynext-web
     restart: unless-stopped
-    ports:
-      - "80:80"
     depends_on:
       - api
     healthcheck:
@@ -51,5 +49,21 @@ services:
       timeout: 5s
       retries: 3
 
+  caddy:
+    image: caddy:2
+    container_name: paynext-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
