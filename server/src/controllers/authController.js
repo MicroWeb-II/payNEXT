@@ -7,19 +7,15 @@ const register = async (req, res, next) => {
   try {
     const { email, password, fullName, phone } = req.body;
     if (!email || !password || !fullName)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "email, password and fullName are required",
-        });
+      return res.status(400).json({
+        success: false,
+        error: "email, password and fullName are required",
+      });
     if (password.length < 6)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Password must be at least 6 characters",
-        });
+      return res.status(400).json({
+        success: false,
+        error: "Password must be at least 6 characters",
+      });
 
     const existing = await userModel.findByEmail(email.toLowerCase());
     if (existing)
@@ -76,14 +72,15 @@ const login = async (req, res, next) => {
   }
 };
 
-exports.me = async (req, res) => {
+const me = async (req, res) => {
   try {
     const user = req.user;
 
     if (!user) {
       return res.status(401).json({ success: false, error: "Unauthorized" });
     }
-    const { password, ...userData } = user;
+
+    const { password_hash, ...userData } = user;
 
     res.status(200).json({
       success: true,
