@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 
 function signToken(user) {
-  return jwt.sign({ sub: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET, {
+  return jwt.sign({ sub: user.id, email: user.email }, process.env.JWT_SECRET, {
     expiresIn: "7d",
   });
 }
@@ -21,13 +21,4 @@ function requireAuth(req, res, next) {
   }
 }
 
-function requireRole(role) {
-  return (req, res, next) => {
-    if (!req.user || req.user.role !== role) {
-      return res.status(403).json({ success: false, error: "Forbidden: insufficient permissions" });
-    }
-    next();
-  };
-}
-
-module.exports = { signToken, requireAuth, requireRole };
+module.exports = { signToken, requireAuth };

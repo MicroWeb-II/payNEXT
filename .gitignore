@@ -5,4 +5,10 @@ node_modules/
 *.log
 .DS_Store
 dist/
-build/
+build/get-docker.sh
+
+# Block all .env files everywhere
+**/.env
+.env
+.agents
+skills-lock.json
