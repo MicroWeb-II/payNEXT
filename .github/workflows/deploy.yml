@@ -26,6 +26,9 @@ jobs:
           test -f web/public/index.html
           test -f db/init.sql
 
+      - name: Create dummy .env file
+        run: echo "JWT_SECRET=super_secret_test_key" > .env
+
       - name: Validate Docker Compose file
         run: docker compose -f docker-compose.yml config > /dev/null
 
