@@ -1,4 +1,4 @@
-paynextt.me, www.paynextt.me {
+paynextt.me, www.paynextt.me, localhost {
 
     encode zstd gzip
 
