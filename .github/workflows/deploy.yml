@@ -21,9 +21,9 @@ jobs:
       - name: Check required files
         run: |
           test -f docker-compose.yml
-          test -f web/Dockerfile
-          test -f web/nginx.conf
-          test -f web/public/index.html
+          test -f client/Dockerfile
+          test -f client/nginx.conf
+          test -f client/public/index.html
           test -f db/init.sql
 
       - name: Create dummy .env file
@@ -76,7 +76,7 @@ jobs:
 
       - name: Copy app and .env to server
         run: |
-          tar --exclude='./.git' --exclude='./.github' -czf paynext.tgz docker-compose.yml web db
+          tar --exclude='./.git' --exclude='./.github' -czf paynext.tgz docker-compose.yml client db
           scp paynext.tgz "$SSH_USER@$SERVER_IP":/tmp/paynext.tgz
           scp server.env "$SSH_USER@$SERVER_IP":/opt/paynext/.env
           rm -f server.env paynext.tgz
@@ -87,7 +87,7 @@ jobs:
           set -e
           cd /opt/paynext
           docker compose down --remove-orphans || true
-          rm -rf web db docker-compose.yml
+          rm -rf client db docker-compose.yml
           tar -xzf /tmp/paynext.tgz
           rm -f /tmp/paynext.tgz
           docker compose up -d --build

@@ -4,274 +4,318 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>payNEXT - Digital Wallet</title>
-
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        font-family: Arial, Helvetica, sans-serif;
-      }
-
-      body {
-        background: linear-gradient(135deg, #0f172a, #111827);
-        color: #ffffff;
-        min-height: 100vh;
-      }
-
-      header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 20px 40px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      }
-
-      .logo {
-        font-size: 28px;
-        font-weight: bold;
-        color: #38bdf8;
-      }
-
-      nav a {
-        color: #e5e7eb;
-        text-decoration: none;
-        margin-left: 20px;
-        font-size: 15px;
-      }
-
-      nav a:hover {
-        color: #38bdf8;
-      }
-
-      .hero {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 90px 24px 50px;
-        text-align: center;
-      }
-
-      .hero h1 {
-        font-size: 56px;
-        line-height: 1.1;
-        margin-bottom: 20px;
-      }
-
-      .hero span {
-        color: #38bdf8;
-      }
-
-      .hero p {
-        max-width: 700px;
-        margin: 0 auto 30px;
-        color: #cbd5e1;
-        font-size: 18px;
-        line-height: 1.6;
-      }
-
-      .buttons {
-        display: flex;
-        justify-content: center;
-        gap: 16px;
-        flex-wrap: wrap;
-      }
-
-      .btn {
-        display: inline-block;
-        padding: 14px 28px;
-        border-radius: 10px;
-        text-decoration: none;
-        font-weight: bold;
-        transition: 0.2s ease;
-      }
-
-      .btn-primary {
-        background: #38bdf8;
-        color: #0f172a;
-      }
-
-      .btn-primary:hover {
-        background: #0ea5e9;
-      }
-
-      .btn-secondary {
-        border: 1px solid #38bdf8;
-        color: #38bdf8;
-      }
-
-      .btn-secondary:hover {
-        background: rgba(56, 189, 248, 0.1);
-      }
-
-      .features {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 30px 24px 80px;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 24px;
-      }
-
-      .card {
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
-        padding: 28px;
-      }
-
-      .card h3 {
-        margin-bottom: 12px;
-        color: #38bdf8;
-      }
-
-      .card p {
-        color: #cbd5e1;
-        line-height: 1.6;
-      }
-
-      .status {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 0 24px 80px;
-        text-align: center;
-      }
-
-      .status button {
-        background: #38bdf8;
-        color: #0f172a;
-        border: none;
-        padding: 13px 24px;
-        font-size: 16px;
-        border-radius: 10px;
-        cursor: pointer;
-        font-weight: bold;
-      }
-
-      .status button:hover {
-        background: #0ea5e9;
-      }
-
-      pre {
-        margin-top: 18px;
-        background: rgba(255, 255, 255, 0.06);
-        display: inline-block;
-        padding: 14px 18px;
-        border-radius: 10px;
-        color: #86efac;
-      }
-
-      footer {
-        text-align: center;
-        padding: 24px;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
-        color: #94a3b8;
-        font-size: 14px;
-      }
-
-      @media (max-width: 768px) {
-        .hero h1 {
-          font-size: 38px;
-        }
-
-        header {
-          flex-direction: column;
-          gap: 14px;
-        }
-      }
-    </style>
+    <link rel="stylesheet" href="css/style.css" />
   </head>
 
   <body>
-    <header>
-      <div class="logo">payNEXT</div>
+    <!-- Global Toast Notifications -->
+    <div id="global-toast-container"></div>
 
-      <nav>
-        <a href="#features">Features</a>
-        <a href="#status">Status</a>
-        <a href="#">Login</a>
-        <a href="#">Register</a>
+    <!-- Navigation Header -->
+    <header>
+      <a href="#/home" class="logo-container">
+        <div class="logo-icon">P</div>
+        <div class="logo-text">pay<span>NEXT</span></div>
+      </a>
+
+      <!-- Guest Navigation -->
+      <nav id="nav-guest">
+        <a href="#/home">Home</a>
+        <a href="#/home#features">Features</a>
+        <a href="#/home#status">API Status</a>
+        <a href="#/login">Login</a>
+        <a href="#/register" class="btn btn-primary btn-sm">Get Started</a>
+      </nav>
+
+      <!-- Authenticated Navigation -->
+      <nav id="nav-auth" style="display: none;">
+        <span class="user-badge">
+          <span>●</span>
+          <span id="nav-user-name">User</span>
+        </span>
+        <a href="#/dashboard" class="active">Dashboard</a>
+        <a href="#/home">Home</a>
+        <button class="btn btn-danger btn-sm btn-logout">Logout</button>
       </nav>
     </header>
 
-    <section class="hero">
-      <h1>Simple Digital Wallet for <span>Fast Payments</span></h1>
+    <!-- Main Views Container -->
+    <main>
+      <!-- 1. HOME / LANDING VIEW -->
+      <section id="home-view" class="view-section active">
+        <div class="hero">
+          <div class="hero-pill">⚡ payNEXT Digital Financial Core</div>
+          <h1>Simple Digital Wallet for <span>Fast Payments</span></h1>
+          <p>
+            payNEXT allows users to store money digitally, send money to other
+            users, top up wallets, and track transactions securely.
+          </p>
+          <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
+            <a href="#/register" class="btn btn-primary">Create Free Account</a>
+            <a href="#/login" class="btn btn-secondary">Sign In to Wallet</a>
+          </div>
+        </div>
 
-      <p>
-        payNEXT allows users to store money digitally, send money to other
-        users, top up wallets, and track transactions securely.
-      </p>
+        <div class="features-grid" id="features">
+          <div class="feature-card">
+            <div class="feature-icon">💸</div>
+            <h3>Send Money</h3>
+            <p>
+              Transfer funds instantly from one payNEXT wallet to another with
+              zero latency and ACID transactional security.
+            </p>
+          </div>
 
-      <div class="buttons">
-        <a href="#" class="btn btn-primary">Get Started</a>
-        <a href="#" class="btn btn-secondary">Login</a>
-      </div>
-    </section>
+          <div class="feature-card">
+            <div class="feature-icon">💳</div>
+            <h3>Top Up Wallet</h3>
+            <p>
+              Add funds seamlessly to your digital balance using bank transfer,
+              card payments, or merchant agents.
+            </p>
+          </div>
 
-    <section class="features" id="features">
-      <div class="card">
-        <h3>Send Money</h3>
-        <p>
-          Transfer money instantly from one payNEXT wallet to another wallet.
-        </p>
-      </div>
+          <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <h3>Transaction History</h3>
+            <p>
+              Audit all credits, debits, transfers, and wallet activity in one
+              centralized, immutable transaction ledger.
+            </p>
+          </div>
 
-      <div class="card">
-        <h3>Top Up Wallet</h3>
-        <p>
-          Add funds to your wallet using bank transfer, card payment, or agent
-          top-up.
-        </p>
-      </div>
+          <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <h3>JWT & Role Security</h3>
+            <p>
+              Protected by Bearer token authorization, bcrypt hashing, rate
+              limiting, and strict input sanitization.
+            </p>
+          </div>
+        </div>
 
-      <div class="card">
-        <h3>Transaction History</h3>
-        <p>
-          View all credits, debits, transfers, and wallet activity in one place.
-        </p>
-      </div>
+        <!-- API Health Check Section -->
+        <div class="status-section" id="status">
+          <div class="status-card">
+            <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 12px;">System Health Verification</h2>
+            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+              Verify connectivity to both the Nginx Web reverse proxy and the Node.js Express REST API.
+            </p>
+            <button onclick="checkHealth()" class="btn btn-primary" id="health-btn">Run Health Check</button>
+            <div class="token-preview-box" id="healthResult" style="margin-top: 18px;">
+              Click button above to ping /healthz and /api/v1/health
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <div class="card">
-        <h3>Secure by Design</h3>
-        <p>
-          Wallet operations are protected using authentication, validation, and
-          database transactions.
-        </p>
-      </div>
-    </section>
+      <!-- 2. LOGIN VIEW -->
+      <section id="login-view" class="view-section">
+        <div class="auth-container">
+          <div class="card">
+            <div class="auth-header">
+              <h2>Welcome Back</h2>
+              <p>Sign in to your payNEXT digital wallet</p>
+            </div>
 
-    <section class="status" id="status">
-      <h2>API Health Check</h2>
-      <br />
+            <div id="login-error" class="form-error-banner"></div>
 
-      <button onclick="checkHealth()">Check Health</button>
+            <form id="login-form">
+              <div class="form-group">
+                <label for="login-email">Email Address</label>
+                <input
+                  type="email"
+                  id="login-email"
+                  class="form-control"
+                  placeholder="name@example.com"
+                  required
+                  autocomplete="email"
+                />
+              </div>
 
-      <br />
+              <div class="form-group">
+                <label for="login-password">Password</label>
+                <input
+                  type="password"
+                  id="login-password"
+                  class="form-control"
+                  placeholder="••••••••"
+                  required
+                  autocomplete="current-password"
+                />
+              </div>
 
-      <pre id="healthResult">Click the button to check server health</pre>
-    </section>
+              <button type="submit" class="btn btn-primary" id="login-submit-btn" style="width: 100%; margin-top: 8px;">
+                Sign In
+              </button>
+            </form>
 
-    <footer>© 2026 payNEXT. All rights reserved.</footer>
+            <div class="auth-footer-text">
+              Don't have an account? <a href="#/register">Create Account</a>
+            </div>
+          </div>
+        </div>
+      </section>
 
-    <script>
-      async function checkHealth() {
-        const result = document.getElementById("healthResult");
+      <!-- 3. REGISTER VIEW -->
+      <section id="register-view" class="view-section">
+        <div class="auth-container">
+          <div class="card">
+            <div class="auth-header">
+              <h2>Create Account</h2>
+              <p>Join payNEXT and activate your digital wallet</p>
+            </div>
 
-        try {
-          result.textContent = "Checking...";
+            <div id="register-error" class="form-error-banner"></div>
 
-          const response = await fetch("/healthz");
+            <form id="register-form">
+              <div class="form-group">
+                <label for="register-name">Full Name</label>
+                <input
+                  type="text"
+                  id="register-name"
+                  class="form-control"
+                  placeholder="John Doe"
+                  required
+                  autocomplete="name"
+                />
+              </div>
 
-          if (response.ok) {
-            const text = await response.text();
-            result.textContent = "Success: " + text;
-          } else {
-            result.textContent =
-              "Health check failed with status: " + response.status;
-          }
-        } catch (error) {
-          result.textContent = "Error: " + error.message;
-        }
-      }
-    </script>
+              <div class="form-group">
+                <label for="register-email">Email Address</label>
+                <input
+                  type="email"
+                  id="register-email"
+                  class="form-control"
+                  placeholder="name@example.com"
+                  required
+                  autocomplete="email"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="register-password">Password</label>
+                <input
+                  type="password"
+                  id="register-password"
+                  class="form-control"
+                  placeholder="At least 6 characters"
+                  required
+                  minlength="6"
+                  autocomplete="new-password"
+                />
+                <div class="form-hint">Must contain at least 6 characters</div>
+              </div>
+
+              <div class="form-group">
+                <label for="register-phone">Phone Number (Optional)</label>
+                <input
+                  type="tel"
+                  id="register-phone"
+                  class="form-control"
+                  placeholder="+1 (555) 000-0000"
+                  autocomplete="tel"
+                />
+              </div>
+
+              <button type="submit" class="btn btn-primary" id="register-submit-btn" style="width: 100%; margin-top: 8px;">
+                Create Account
+              </button>
+            </form>
+
+            <div class="auth-footer-text">
+              Already have an account? <a href="#/login">Sign In</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. DASHBOARD VIEW (PROTECTED) -->
+      <section id="dashboard-view" class="view-section">
+        <div class="dashboard-container">
+          <div class="dash-header">
+            <div class="dash-title">
+              <h1>Wallet Dashboard</h1>
+              <p>Manage your account credentials, token security, and wallet balance</p>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-logout">Sign Out</button>
+            </div>
+          </div>
+
+          <!-- Dashboard Grid -->
+          <div class="grid-dashboard">
+            <!-- User Profile Card -->
+            <div class="dash-card">
+              <div class="dash-card-header">
+                <h3>User Profile</h3>
+                <span class="badge badge-cyan" id="dash-user-role">USER</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Full Name</span>
+                <span class="detail-value" id="dash-user-name">Loading...</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Email</span>
+                <span class="detail-value" id="dash-user-email">Loading...</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Phone</span>
+                <span class="detail-value" id="dash-user-phone">Loading...</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Account ID</span>
+                <span class="detail-value" id="dash-user-id">Loading...</span>
+              </div>
+            </div>
+
+            <!-- Token Storage & Security Card -->
+            <div class="dash-card">
+              <div class="dash-card-header">
+                <h3>Token Security & Storage</h3>
+                <span class="badge badge-success">JWT ACTIVE</span>
+              </div>
+              <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+                JWT Bearer token is saved in <code>localStorage.getItem('paynext_token')</code> and automatically injected into the HTTP <code>Authorization</code> header by <code>js/api.js</code>.
+              </p>
+              <div class="token-preview-box" id="dash-token-preview">
+                Retrieving active Bearer token...
+              </div>
+              <div style="display: flex; gap: 10px; margin-top: 14px;">
+                <button class="btn btn-secondary btn-sm" id="copy-token-btn">📋 Copy Token</button>
+              </div>
+            </div>
+
+            <!-- Wallet Overview Card (Week 2 Readiness) -->
+            <div class="dash-card" style="grid-column: 1 / -1;">
+              <div class="dash-card-header">
+                <h3>Digital Wallet Balance</h3>
+                <span class="badge badge-warning">Week 2 Target</span>
+              </div>
+              <div class="wallet-card-preview">
+                <div class="wallet-num-tag" id="dash-wallet-number">PAYNX-000001</div>
+                <div class="wallet-balance-amount">$0.00 <span style="font-size: 18px; color: var(--text-muted); font-weight: normal;">USD</span></div>
+                <div class="wallet-actions">
+                  <button class="btn btn-primary btn-sm" onclick="alert('Top-Up functionality is scheduled for Week 2 implementation!')">➕ Top Up</button>
+                  <button class="btn btn-secondary btn-sm" onclick="alert('Send Money functionality is scheduled for Week 3 implementation!')">↗️ Send Money</button>
+                  <button class="btn btn-secondary btn-sm" onclick="alert('Withdraw functionality is scheduled for Week 2 implementation!')">🏦 Withdraw</button>
+                  <button class="btn btn-secondary btn-sm" onclick="alert('Transaction history is scheduled for Week 2 implementation!')">📜 History</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+      <p>© 2026 payNEXT Digital Wallet. Built for CSE 362 - Web Design and Programming Laboratory-II.</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
   </body>
 </html>
