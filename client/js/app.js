@@ -1,69 +1,69 @@
-
-const appView = document.getElementById("app-view");
-const logoutButton = document.getElementById("logout-button");
-
-const routes = {
-  "/login": {
-    render: renderLogin,
-    init: initLogin,
+const Auth = {
+  getToken() {
+    return localStorage.getItem("token");
   },
-  "/register": {
-    render: renderRegister,
-    init: initRegister,
+
+  saveToken(token) {
+    localStorage.setItem("token", token);
   },
-  "/dashboard": {
-    render: renderDashboard,
-    init: initDashboard,
-    protected: true,
+
+  getUser() {
+    try {
+      return JSON.parse(localStorage.getItem("user"));
+    } catch {
+      return null;
+    }
+  },
+
+  saveUser(user) {
+    localStorage.setItem("user", JSON.stringify(user));
+  },
+
+  clearToken() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+  },
+
+  isLoggedIn() {
+    return Boolean(this.getToken());
+  },
+
+  // apiRequest already unwrapped { data }, so `data` is { token, user }.
+  async login(email, password) {
+    const data = await apiRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!data?.token) {
+      throw new Error("The server did not return a login token.");
+    }
+
+    this.saveToken(data.token);
+    if (data.user) this.saveUser(data.user);
+    return data;
+  },
+
+  // Backend expects fullName (not name). phone is optional.
+  async register(fullName, email, password, phone) {
+    const body = { fullName, email, password };
+    if (phone) body.phone = phone;
+
+    const data = await apiRequest("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    if (data?.token) {
+      this.saveToken(data.token);
+      if (data.user) this.saveUser(data.user);
+    }
+
+    return data;
+  },
+
+  logout() {
+    this.clearToken();
+    window.location.hash = "#/login";
   },
 };
-
-function updateNavigation() {
-  const loggedIn = Auth.isLoggedIn();
-
-  logoutButton.classList.toggle("hidden", !loggedIn);
-
-  document.querySelectorAll("[data-nav]").forEach((link) => {
-    const isCurrent = link.dataset.nav ===
-      window.location.hash.replace(/^#\//, "");
-
-    link.setAttribute("aria-current", isCurrent ? "page" : "false");
-  });
-}
-
-async function navigate() {
-  let path = window.location.hash.slice(1) || "/login";
-
-  if (!path.startsWith("/")) {
-    path = `/${path}`;
-  }
-
-  const route = routes[path];
-
-  if (!route) {
-    window.location.hash = "#/login";
-    return;
-  }
-
-  if (route.protected && !Auth.isLoggedIn()) {
-    window.location.hash = "#/login";
-    return;
-  }
-
-  appView.innerHTML = route.render();
-  updateNavigation();
-
-  if (route.init) {
-    await route.init();
-  }
-
-  updateNavigation();
-}
-
-logoutButton.addEventListener("click", () => {
-  Auth.logout();
-});
-
-window.addEventListener("hashchange", navigate);
-
-navigate();
