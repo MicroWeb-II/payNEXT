@@ -1,4 +1,3 @@
-
 function renderRegister() {
   return `
     <section class="card">
@@ -9,8 +8,8 @@ function renderRegister() {
 
       <form id="register-form">
         <div class="form-group">
-          <label for="register-name">Name</label>
-          <input id="register-name" name="name" type="text"
+          <label for="register-name">Full name</label>
+          <input id="register-name" name="fullName" type="text"
             autocomplete="name" maxlength="100" required>
         </div>
 
@@ -18,6 +17,12 @@ function renderRegister() {
           <label for="register-email">Email</label>
           <input id="register-email" name="email" type="email"
             autocomplete="email" required>
+        </div>
+
+        <div class="form-group">
+          <label for="register-phone">Phone (optional)</label>
+          <input id="register-phone" name="phone" type="tel"
+            autocomplete="tel" placeholder="01712345678">
         </div>
 
         <div class="form-group">
@@ -48,8 +53,9 @@ function initRegister() {
     const button = form.querySelector('button[type="submit"]');
     const message = document.getElementById("register-message");
 
-    const name = form.elements.name.value.trim();
+    const fullName = form.elements.fullName.value.trim();
     const email = form.elements.email.value.trim();
+    const phone = form.elements.phone.value.trim();
     const password = form.elements.password.value;
 
     if (password.length < 8) {
@@ -62,14 +68,13 @@ function initRegister() {
     message.textContent = "";
 
     try {
-      const data = await Auth.register(name, email, password);
+      await Auth.register(fullName, email, password, phone);
 
       if (Auth.isLoggedIn()) {
         window.location.hash = "#/dashboard";
       } else {
         message.className = "message message-success";
-        message.textContent =
-          data?.message || "Registration successful. Please log in.";
+        message.textContent = "Registration successful. Please log in.";
         form.reset();
       }
     } catch (error) {
