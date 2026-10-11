@@ -1,0 +1,170 @@
+
+:root {
+  font-family: system-ui, sans-serif;
+  color: #202536;
+  background: #f4f6fb;
+  font-synthesis: none;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 6%;
+  background: #172554;
+  color: white;
+}
+
+.brand {
+  color: white;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.nav-links a {
+  color: white;
+  text-decoration: none;
+}
+
+.nav-links a:hover {
+  text-decoration: underline;
+}
+
+.container {
+  width: min(100% - 32px, 680px);
+  margin: 48px auto;
+  flex: 1;
+}
+
+.card {
+  padding: 28px;
+  background: white;
+  border: 1px solid #e0e5ef;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgb(20 30 60 / 6%);
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 1.8rem;
+}
+
+.muted {
+  color: #687187;
+}
+
+.form-group {
+  margin: 18px 0;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd2df;
+  border-radius: 8px;
+  font: inherit;
+}
+
+input:focus {
+  outline: 2px solid #93c5fd;
+  border-color: #2563eb;
+}
+
+.button {
+  display: inline-block;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button:hover {
+  background: #1d4ed8;
+}
+
+.button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.button-small {
+  padding: 7px 12px;
+}
+
+.form-button {
+  width: 100%;
+}
+
+.message {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.message-error {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.message-success {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.footer {
+  padding: 18px;
+  text-align: center;
+  color: #687187;
+}
+
+@media (max-width: 520px) {
+  .navbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nav-links {
+    gap: 12px;
+  }
+
+  .card {
+    padding: 20px;
+  }
+}
