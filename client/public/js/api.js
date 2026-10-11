@@ -1,82 +1,50 @@
-/**
- * payNEXT Centralized API Client
- * Automatically attaches JWT Bearer token from localStorage to all requests.
- * Handles automatic 401 Unauthorized redirect to login.
- */
+// Relative URL: Caddy routes /api/* to the Node backend, so this works
+// locally and in production without CORS or hardcoded hosts.
+const API_BASE_URL = "/api/v1";
 
-// Centralized Fetch Interceptor
 async function apiRequest(endpoint, options = {}) {
-  const token = localStorage.getItem('paynext_token');
+  const token = Auth.getToken();
 
   const headers = {
-    'Content-Type': 'application/json',
+    ...(options.body ? { "Content-Type": "application/json" } : {}),
     ...options.headers,
   };
 
-  // Attach Bearer token if it exists
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`/api/v1${endpoint}`, {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers,
   });
 
-  if (response.status === 401) {
-    // Token expired or invalid, redirect to login
-    localStorage.removeItem('paynext_token');
-    localStorage.removeItem('paynext_user');
-    window.location.hash = '#/login';
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : null;
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      Auth.clearToken();
+    }
+
+    // Validation failures come back as { success: false, errors: [{ msg }] }.
+    // Other errors may be { error: "text" } or { message: "text" }.
+    const validation = Array.isArray(payload?.errors)
+      ? payload.errors.map((e) => e.msg).join(" ")
+      : "";
+    const err = payload?.error;
+    const message =
+      validation ||
+      (typeof err === "string" ? err : err?.message) ||
+      payload?.message ||
+      `Request failed (${response.status})`;
+
+    throw new Error(message);
   }
 
-  return response.json();
+  // The backend wraps successful responses as { data: ... }.
+  // Unwrap once here so every caller gets the data directly.
+  return payload && "data" in payload ? payload.data : payload;
 }
-
-// Dedicated Auth API endpoints
-const authAPI = {
-  /**
-   * Log in user
-   * @param {string} email
-   * @param {string} password
-   */
-  login: async (email, password) => {
-    return apiRequest('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-  },
-
-  /**
-   * Register new user
-   * @param {{ fullName: string, email: string, password: string, phone?: string }} userData
-   */
-  register: async (userData) => {
-    return apiRequest('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
-  },
-
-  /**
-   * Fetch current authenticated user's profile
-   */
-  getMe: async () => {
-    return apiRequest('/auth/me', {
-      method: 'GET',
-    });
-  },
-
-  /**
-   * Check system health
-   */
-  getHealth: async () => {
-    return apiRequest('/health', {
-      method: 'GET',
-    });
-  },
-};
-
-// Make available globally in the browser
-window.apiRequest = apiRequest;
-window.authAPI = authAPI;

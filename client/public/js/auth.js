@@ -1,88 +1,50 @@
-/**
- * payNEXT Authentication State Manager
- * Handles localStorage token management, user session caching, and auth guards.
- */
+// Relative URL: Caddy routes /api/* to the Node backend, so this works
+// locally and in production without CORS or hardcoded hosts.
+const API_BASE_URL = "/api/v1";
 
-const Auth = {
-  TOKEN_KEY: 'paynext_token',
-  USER_KEY: 'paynext_user',
+async function apiRequest(endpoint, options = {}) {
+  const token = Auth.getToken();
 
-  /**
-   * Get the current JWT token from localStorage
-   * @returns {string|null}
-   */
-  getToken() {
-    return localStorage.getItem(this.TOKEN_KEY);
-  },
+  const headers = {
+    ...(options.body ? { "Content-Type": "application/json" } : {}),
+    ...options.headers,
+  };
 
-  /**
-   * Get the cached user profile
-   * @returns {object|null}
-   */
-  getUser() {
-    try {
-      const data = localStorage.getItem(this.USER_KEY);
-      return data ? JSON.parse(data) : null;
-    } catch (e) {
-      console.error('Failed to parse cached user:', e);
-      return null;
-    }
-  },
-
-  /**
-   * Store token and user profile in localStorage
-   * @param {string} token
-   * @param {object} user
-   */
-  setSession(token, user) {
-    if (token) {
-      localStorage.setItem(this.TOKEN_KEY, token);
-    }
-    if (user) {
-      localStorage.setItem(this.USER_KEY, JSON.stringify(user));
-    }
-    window.dispatchEvent(new CustomEvent('auth:change', { detail: { isAuthenticated: true, user } }));
-  },
-
-  /**
-   * Clear session from localStorage
-   */
-  clearSession() {
-    localStorage.removeItem(this.TOKEN_KEY);
-    localStorage.removeItem(this.USER_KEY);
-    window.dispatchEvent(new CustomEvent('auth:change', { detail: { isAuthenticated: false, user: null } }));
-  },
-
-  /**
-   * Check if user is currently authenticated
-   * @returns {boolean}
-   */
-  isAuthenticated() {
-    return !!this.getToken();
-  },
-
-  /**
-   * Log out current user and redirect to login
-   */
-  logout() {
-    this.clearSession();
-    window.location.hash = '#/login';
-  },
-
-  /**
-   * Parse error message from API response (supports standard string error or express-validator errors array)
-   * @param {object} res
-   * @returns {string}
-   */
-  formatError(res) {
-    if (!res) return 'An unexpected error occurred.';
-    if (res.error) return res.error;
-    if (res.message && typeof res.message === 'string') return res.message;
-    if (Array.isArray(res.errors) && res.errors.length > 0) {
-      return res.errors.map(err => err.msg || err.message || JSON.stringify(err)).join(', ');
-    }
-    return 'Operation failed. Please try again.';
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
-};
 
-window.Auth = Auth;
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : null;
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      Auth.clearToken();
+    }
+
+    // Validation failures come back as { success: false, errors: [{ msg }] }.
+    // Other errors may be { error: "text" } or { message: "text" }.
+    const validation = Array.isArray(payload?.errors)
+      ? payload.errors.map((e) => e.msg).join(" ")
+      : "";
+    const err = payload?.error;
+    const message =
+      validation ||
+      (typeof err === "string" ? err : err?.message) ||
+      payload?.message ||
+      `Request failed (${response.status})`;
+
+    throw new Error(message);
+  }
+
+  // The backend wraps successful responses as { data: ... }.
+  // Unwrap once here so every caller gets the data directly.
+  return payload && "data" in payload ? payload.data : payload;
+}
