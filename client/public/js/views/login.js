@@ -1,4 +1,3 @@
-
 function renderLogin() {
   return `
     <section class="card">
