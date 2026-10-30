@@ -35,12 +35,12 @@
         </span>
         <a href="#/dashboard" class="active">Dashboard</a>
         <a href="#/home">Home</a>
-        <button class="btn btn-danger btn-sm btn-logout">Logout</button>
+        <button class="btn btn-danger btn-sm btn-logout" id="logout-button">Logout</button>
       </nav>
     </header>
 
     <!-- Main Views Container -->
-    <main>
+    <main id="app-view">
       <!-- 1. HOME / LANDING VIEW -->
       <section id="home-view" class="view-section active">
         <div class="hero">
@@ -286,21 +286,118 @@
               </div>
             </div>
 
-            <!-- Wallet Overview Card (Week 2 Readiness) -->
+            <!-- Wallet Overview Card -->
             <div class="dash-card" style="grid-column: 1 / -1;">
               <div class="dash-card-header">
                 <h3>Digital Wallet Balance</h3>
-                <span class="badge badge-warning">Week 2 Target</span>
+                <span class="badge badge-success" id="dash-wallet-status">ACTIVE</span>
               </div>
               <div class="wallet-card-preview">
                 <div class="wallet-num-tag" id="dash-wallet-number">PAYNX-000001</div>
-                <div class="wallet-balance-amount">$0.00 <span style="font-size: 18px; color: var(--text-muted); font-weight: normal;">USD</span></div>
+                <div class="wallet-balance-amount" id="dash-wallet-balance">$0.00 <span style="font-size: 18px; color: var(--text-muted); font-weight: normal;">USD</span></div>
                 <div class="wallet-actions">
-                  <button class="btn btn-primary btn-sm" onclick="alert('Top-Up functionality is scheduled for Week 2 implementation!')">➕ Top Up</button>
-                  <button class="btn btn-secondary btn-sm" onclick="alert('Send Money functionality is scheduled for Week 3 implementation!')">↗️ Send Money</button>
-                  <button class="btn btn-secondary btn-sm" onclick="alert('Withdraw functionality is scheduled for Week 2 implementation!')">🏦 Withdraw</button>
-                  <button class="btn btn-secondary btn-sm" onclick="alert('Transaction history is scheduled for Week 2 implementation!')">📜 History</button>
+                  <button class="btn btn-primary btn-sm" id="btn-toggle-topup" type="button">➕ Top Up</button>
+                  <button class="btn btn-secondary btn-sm" id="btn-toggle-transfer" type="button">↗️ Send Money</button>
+                  <button class="btn btn-secondary btn-sm" id="btn-refresh-wallet" type="button">🔄 Refresh Balance</button>
                 </div>
+              </div>
+            </div>
+
+            <!-- Top Up Panel -->
+            <div class="dash-card" id="topup-panel">
+              <div class="dash-card-header">
+                <h3>Top Up Wallet</h3>
+                <span class="badge badge-cyan">ADD FUNDS</span>
+              </div>
+              <div id="topup-error" class="form-error-banner" style="display: none;"></div>
+              <form id="topup-form">
+                <div class="form-group">
+                  <label for="topup-amount">Amount (USD)</label>
+                  <input
+                    type="number"
+                    id="topup-amount"
+                    name="amount"
+                    class="form-control"
+                    placeholder="50.00"
+                    min="1"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="topup-provider">Payment Provider</label>
+                  <select id="topup-provider" name="provider" class="form-control" style="cursor: pointer;">
+                    <option value="mock">Mock Sandbox Gateway (Instant)</option>
+                    <option value="bank_transfer">Direct Bank Transfer</option>
+                    <option value="card">Debit / Credit Card</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-primary" id="topup-submit-btn" style="width: 100%; margin-top: 8px;">
+                  Confirm Top Up
+                </button>
+              </form>
+            </div>
+
+            <!-- Send Money Panel -->
+            <div class="dash-card" id="transfer-panel">
+              <div class="dash-card-header">
+                <h3>Send Money</h3>
+                <span class="badge badge-cyan">TRANSFER</span>
+              </div>
+              <div id="transfer-error" class="form-error-banner" style="display: none;"></div>
+              <form id="transfer-form">
+                <div class="form-group">
+                  <label for="transfer-to-wallet">Recipient Wallet Number</label>
+                  <input
+                    type="text"
+                    id="transfer-to-wallet"
+                    name="toWalletNumber"
+                    class="form-control"
+                    placeholder="PAYNX-123456"
+                    pattern="^PAYNX-[0-9]{6}$"
+                    title="Must be format: PAYNX-XXXXXX (e.g. PAYNX-000001)"
+                    required
+                  />
+                  <div class="form-hint">Format: PAYNX- followed by 6 digits</div>
+                </div>
+                <div class="form-group">
+                  <label for="transfer-amount">Amount (USD)</label>
+                  <input
+                    type="number"
+                    id="transfer-amount"
+                    name="amount"
+                    class="form-control"
+                    placeholder="25.00"
+                    min="0.01"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="transfer-note">Note / Reference (Optional)</label>
+                  <input
+                    type="text"
+                    id="transfer-note"
+                    name="note"
+                    class="form-control"
+                    placeholder="e.g. Lunch split"
+                    maxlength="200"
+                  />
+                </div>
+                <button type="submit" class="btn btn-primary" id="transfer-submit-btn" style="width: 100%; margin-top: 8px;">
+                  Send Money
+                </button>
+              </form>
+            </div>
+
+            <!-- Transaction History Panel -->
+            <div class="dash-card" id="history-panel" style="grid-column: 1 / -1;">
+              <div class="dash-card-header">
+                <h3>Transaction History</h3>
+                <button class="btn btn-secondary btn-sm" id="btn-refresh-history" type="button">🔄 Refresh History</button>
+              </div>
+              <div id="transactions-container">
+                <div class="tx-empty">Loading transaction history...</div>
               </div>
             </div>
           </div>
@@ -314,8 +411,11 @@
     </footer>
 
     <!-- Scripts -->
-    <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/views/login.js"></script>
+    <script src="js/views/register.js"></script>
+    <script src="js/views/dashboard.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>

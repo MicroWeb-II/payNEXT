@@ -1,45 +1,82 @@
+/**
+ * payNEXT Register View Controller
+ */
+
 function renderRegister() {
   return `
-    <section class="card">
-      <h1>Create your account</h1>
-      <p class="muted">Register to get started.</p>
-
-      <div id="register-message" aria-live="polite"></div>
-
-      <form id="register-form">
-        <div class="form-group">
-          <label for="register-name">Full name</label>
-          <input id="register-name" name="fullName" type="text"
-            autocomplete="name" maxlength="100" required>
+    <div class="auth-container">
+      <div class="card">
+        <div class="auth-header">
+          <h2>Create Account</h2>
+          <p>Join payNEXT and activate your digital wallet</p>
         </div>
 
-        <div class="form-group">
-          <label for="register-email">Email</label>
-          <input id="register-email" name="email" type="email"
-            autocomplete="email" required>
+        <div id="register-error" class="form-error-banner" style="display: none;"></div>
+
+        <form id="register-form">
+          <div class="form-group">
+            <label for="register-name">Full Name</label>
+            <input
+              type="text"
+              id="register-name"
+              name="fullName"
+              class="form-control"
+              placeholder="John Doe"
+              required
+              autocomplete="name"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="register-email">Email Address</label>
+            <input
+              type="email"
+              id="register-email"
+              name="email"
+              class="form-control"
+              placeholder="name@example.com"
+              required
+              autocomplete="email"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="register-password">Password</label>
+            <input
+              type="password"
+              id="register-password"
+              name="password"
+              class="form-control"
+              placeholder="At least 6 characters"
+              required
+              minlength="6"
+              autocomplete="new-password"
+            />
+            <div class="form-hint">Must contain at least 6 characters</div>
+          </div>
+
+          <div class="form-group">
+            <label for="register-phone">Phone Number (Optional)</label>
+            <input
+              type="tel"
+              id="register-phone"
+              name="phone"
+              class="form-control"
+              placeholder="+1 (555) 000-0000"
+              autocomplete="tel"
+            />
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="register-submit-btn" style="width: 100%; margin-top: 8px;">
+            Create Account
+          </button>
+        </form>
+
+        <div class="auth-footer-text">
+          Already have an account? <a href="#/login">Sign In</a>
         </div>
-
-        <div class="form-group">
-          <label for="register-phone">Phone (optional)</label>
-          <input id="register-phone" name="phone" type="tel"
-            autocomplete="tel" placeholder="01712345678">
-        </div>
-
-        <div class="form-group">
-          <label for="register-password">Password</label>
-          <input id="register-password" name="password" type="password"
-            autocomplete="new-password" minlength="8" required>
-        </div>
-
-        <button class="button form-button" type="submit">
-          Create account
-        </button>
-      </form>
-
-      <p class="muted">
-        Already registered? <a href="#/login">Log in</a>.
-      </p>
-    </section>
+      </div>
+    </div>
   `;
 }
 
@@ -47,41 +84,96 @@ function initRegister() {
   const form = document.getElementById("register-form");
   if (!form) return;
 
+  const errorBox = document.getElementById("register-error");
+  if (errorBox) {
+    errorBox.style.display = "none";
+    errorBox.textContent = "";
+  }
+
+  // Prevent multiple bindings
+  if (form.dataset.bound === "true") return;
+  form.dataset.bound = "true";
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const button = form.querySelector('button[type="submit"]');
-    const message = document.getElementById("register-message");
+    const submitBtn = document.getElementById("register-submit-btn") || form.querySelector('button[type="submit"]');
+    const nameInput = document.getElementById("register-name") || form.elements.fullName;
+    const emailInput = document.getElementById("register-email") || form.elements.email;
+    const passwordInput = document.getElementById("register-password") || form.elements.password;
+    const phoneInput = document.getElementById("register-phone") || form.elements.phone;
 
-    const fullName = form.elements.fullName.value.trim();
-    const email = form.elements.email.value.trim();
-    const phone = form.elements.phone.value.trim();
-    const password = form.elements.password.value;
+    const fullName = nameInput ? nameInput.value.trim() : "";
+    const email = emailInput ? emailInput.value.trim() : "";
+    const password = passwordInput ? passwordInput.value : "";
+    const phone = phoneInput ? phoneInput.value.trim() : "";
 
-    if (password.length < 8) {
-      message.className = "message message-error";
-      message.textContent = "Password must be at least 8 characters.";
+    if (!fullName || !email || !password) {
+      const msg = "Please fill in all required fields.";
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = "block";
+      }
+      if (typeof showToast === "function") {
+        showToast(msg, "warning");
+      }
       return;
     }
 
-    button.disabled = true;
-    message.textContent = "";
+    if (password.length < 6) {
+      const msg = "Password must be at least 6 characters.";
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = "block";
+      }
+      if (typeof showToast === "function") {
+        showToast(msg, "warning");
+      }
+      return;
+    }
+
+    if (errorBox) {
+      errorBox.style.display = "none";
+      errorBox.textContent = "";
+    }
+
+    if (typeof setButtonLoading === "function") {
+      setButtonLoading(submitBtn, true, "Create Account", "Creating account...");
+    } else if (submitBtn) {
+      submitBtn.disabled = true;
+    }
 
     try {
       await Auth.register(fullName, email, password, phone);
 
-      if (Auth.isLoggedIn()) {
+      if (typeof showToast === "function") {
+        showToast("Account created successfully! Welcome to payNEXT.", "success");
+      }
+      form.reset();
+
+      if (Auth.isAuthenticated()) {
         window.location.hash = "#/dashboard";
       } else {
-        message.className = "message message-success";
-        message.textContent = "Registration successful. Please log in.";
-        form.reset();
+        window.location.hash = "#/login";
       }
     } catch (error) {
-      message.className = "message message-error";
-      message.textContent = error.message || "Registration failed.";
+      const msg = error.message || "Registration failed. Please try again.";
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = "block";
+      }
+      if (typeof showToast === "function") {
+        showToast(msg, "error");
+      }
     } finally {
-      button.disabled = false;
+      if (typeof setButtonLoading === "function") {
+        setButtonLoading(submitBtn, false, "Create Account");
+      } else if (submitBtn) {
+        submitBtn.disabled = false;
+      }
     }
   });
 }
+
+window.renderRegister = renderRegister;
+window.initRegister = initRegister;
