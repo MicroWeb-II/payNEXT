@@ -9,19 +9,20 @@ This document outlines the security implementations in the payNEXT architecture.
 
 ## 2. Access Control & Rate Limiting
 
-- **Rate Limiting:** Authentication endpoints (`/api/v1/auth/login`, `/register`) are restricted to 5 requests per 15 minutes per IP to prevent brute-force attacks.
-- **CORS:** Strict origin whitelisting is enforced. Only `https://paynextt.me` and `http://localhost:8080` are permitted.
+- **Rate Limiting:** Authentication endpoints (`/api/v1/auth/login`, `/register`) are rate limited per IP. Money and read routes have per-IP and per-user limits.
+- **CORS:** Production allowed origins are configured through `ALLOWED_ORIGINS`; an empty value closes browser cross-origin access.
 
 ## 3. Input Validation & Injection Prevention
 
 - **SQL Injection:** All PostgreSQL queries use parameterized inputs via the `pg` library.
-- **XSS & Data Sanitization:** `express-validator` is used to trim, escape, and validate all incoming user inputs before processing.
+- **Input validation:** Express validators check route inputs, and money controllers enforce amount limits before processing.
 
-## 4. Infrastructure & Load Balancing
+## 4. Infrastructure
 
-- **Reverse Proxy:** Caddy acts as the single entry point, routing `/api/*` to the backend and `/` to the Nginx frontend.
-- **Load Balancing:** The API service can be scaled horizontally (`docker-compose up --scale api=2`). Caddy distributes traffic across instances using a `round_robin` policy.
+- **Reverse Proxy:** Caddy routes `/api/*` to the backend and `/` to the Nginx frontend.
 
-## 5. How to Test
+## 5. Token lifecycle
 
-See the repository wiki or run the provided `curl` commands in `TESTING.md` to verify rate limiting, CORS, and header configurations.
+Access tokens expire after 15 minutes. Refresh token rotation is a follow-up: the current client has no refresh-token storage or rotation endpoint, so users must sign in again when an access token expires. Implement rotation with hashed, revocable refresh-token records and reuse detection before adding automatic renewal.
+
+Production deployment secrets are supplied through GitHub Actions secrets and copied directly to the host as `/opt/paynext/.env`. The deployment archive excludes `.env` files.

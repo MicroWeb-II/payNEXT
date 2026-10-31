@@ -47,12 +47,12 @@ function renderRegister() {
               id="register-password"
               name="password"
               class="form-control"
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters (letters + numbers)"
               required
-              minlength="6"
+              minlength="8"
               autocomplete="new-password"
             />
-            <div class="form-hint">Must contain at least 6 characters</div>
+            <div class="form-hint">Must be at least 8 characters with letters and numbers</div>
           </div>
 
           <div class="form-group">
@@ -120,8 +120,8 @@ function initRegister() {
       return;
     }
 
-    if (password.length < 6) {
-      const msg = "Password must be at least 6 characters.";
+    if (password.length < 8 || !/^(?=.*[a-zA-Z])(?=.*[0-9])/.test(password)) {
+      const msg = "Password must be at least 8 characters and contain at least one letter and one number.";
       if (errorBox) {
         errorBox.textContent = msg;
         errorBox.style.display = "block";
