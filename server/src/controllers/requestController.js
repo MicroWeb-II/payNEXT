@@ -2,18 +2,17 @@ const walletModel = require("../models/walletModel");
 const paymentRequestModel = require("../models/paymentRequestModel");
 const {
   ApiError,
+  normalizeAmount,
   withTransaction,
   lockWallet,
-  setBalance,
+  adjustBalance,
   logTx,
 } = require("../services/moneyService");
 
 const createRequest = async (req, res, next) => {
   try {
-    const amount = Number(req.body.amount);
+    const amount = normalizeAmount(req.body.amount);
     const { requesterWalletId, payerEmail, note } = req.body;
-    if (!amount || amount <= 0)
-      throw new ApiError("amount must be greater than 0", 400);
     if (!requesterWalletId || !payerEmail)
       throw new ApiError("requesterWalletId and payerEmail are required", 400);
 
@@ -71,19 +70,15 @@ const approveRequest = async (req, res, next) => {
       if (payerWallet.user_id !== req.user.sub)
         throw new ApiError("Not your wallet", 403);
 
-      const amount = Number(request.amount);
-      if (Number(payerWallet.balance) < amount)
-        throw new ApiError("Insufficient balance", 400);
-
       const requesterWallet = await lockWallet(
         client,
         request.requester_wallet_id,
       );
 
-      const payerBalance = Number(payerWallet.balance) - amount;
-      const requesterBalance = Number(requesterWallet.balance) + amount;
-      await setBalance(client, payerWallet, payerBalance);
-      await setBalance(client, requesterWallet, requesterBalance);
+      const amount = request.amount;
+      const payerBalance = await adjustBalance(client, payerWallet, amount, "debit");
+      if (payerBalance === undefined) throw new ApiError("Insufficient balance", 400);
+      const requesterBalance = await adjustBalance(client, requesterWallet, amount, "credit");
 
       await logTx(client, {
         walletId: payerWallet.id,
@@ -144,9 +139,9 @@ const getRequestById = async (req, res, next) => {
 const updateRequest = async (req, res, next) => {
   try {
     const { amount, note } = req.body;
-    if (!amount || amount <= 0) throw new ApiError("Amount must be > 0", 400);
+    const validAmount = normalizeAmount(amount);
 
-    const updated = await paymentRequestModel.update(req.params.id, amount, note, req.user.email);
+    const updated = await paymentRequestModel.update(req.params.id, validAmount, note, req.user.email);
     if (!updated) throw new ApiError("Pending request not found for you", 404);
 
     res.json({ success: true, message: "Payment request updated", data: updated });

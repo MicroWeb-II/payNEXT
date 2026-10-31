@@ -8,8 +8,11 @@ const uuidParam = (name = "id") =>
 
 const amount = (name = "amount") =>
   body(name)
-    .isFloat({ gt: 0 })
-    .withMessage(`${name} must be greater than 0`);
+    .custom((value) => {
+      const text = String(value);
+      return /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(text) && /[1-9]/.test(text);
+    })
+    .withMessage(`${name} must be positive with at most 2 decimal places`);
 
 const walletId = (name) =>
   body(name)

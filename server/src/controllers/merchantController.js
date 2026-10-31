@@ -1,6 +1,6 @@
 const merchantModel = require("../models/merchantModel");
 const walletModel = require("../models/walletModel");
-const { ApiError, withTransaction, lockWallet, setBalance, logTx } = require("../services/moneyService");
+const { ApiError, normalizeAmount, withTransaction, lockWallet, adjustBalance, logTx } = require("../services/moneyService");
 
 const createMerchant = async (req, res, next) => {
   try {
@@ -55,10 +55,11 @@ const deleteMerchant = async (req, res, next) => {
 
 const payMerchant = async (req, res, next) => {
   try {
-    const { merchantId, amount } = req.body;
-    if (!merchantId || !amount || amount <= 0) {
+    const { merchantId } = req.body;
+    if (!merchantId || !req.body.amount) {
       throw new ApiError("Valid merchantId and amount > 0 are required", 400);
     }
+    const paymentAmount = normalizeAmount(req.body.amount);
 
     const data = await withTransaction(async (client) => {
       // 1. Verify merchant exists
@@ -71,15 +72,11 @@ const payMerchant = async (req, res, next) => {
       if (!wallets || wallets.length === 0) throw new ApiError("No wallet found", 404);
       
       const userWallet = await lockWallet(client, wallets[0].id);
-      const paymentAmount = Number(amount);
-
-      if (Number(userWallet.balance) < paymentAmount) {
+      // 3. Deduct balance
+      const newBalance = await adjustBalance(client, userWallet, paymentAmount, "debit");
+      if (newBalance === undefined) {
         throw new ApiError("Insufficient balance to pay merchant", 400);
       }
-
-      // 3. Deduct balance
-      const newBalance = Number(userWallet.balance) - paymentAmount;
-      await setBalance(client, userWallet, newBalance);
 
       // 4. Log in master ledger
       await logTx(client, {
