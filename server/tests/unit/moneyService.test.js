@@ -6,14 +6,14 @@ const { ApiError, normalizeAmount, withTransaction, adjustBalance } = require(".
 describe("money service", () => {
   beforeEach(() => pool.connect.mockReset());
 
-  test.each([["0.01"], ["1"], ["1234567890123.99"], [2.5]])(
+  test.each([["0.01"], ["1"], ["1000000.00"], [2.5]])(
     "accepts valid amount %s",
     (amount) => {
       expect(normalizeAmount(amount)).toBe(String(amount));
     },
   );
 
-  test.each(["0", "0.00", "-1", "1.001", "1e3", "10000000000000"])(
+  test.each(["0", "0.00", "-1", "1.001", "1e3", "1000000.01", "10000000000000"])(
     "rejects invalid amount %s",
     (amount) => {
       expect(() => normalizeAmount(amount)).toThrow(ApiError);

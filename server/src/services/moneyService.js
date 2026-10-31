@@ -37,8 +37,11 @@ async function withTransaction(fn, maxRetries = 3) {
 function normalizeAmount(amount) {
   const value = String(amount);
   if (!/^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(value) || !/[1-9]/.test(value)) {
-    throw new ApiError("amount must be a positive value with at most 2 decimals", 400);
+    throw new ApiError("amount must be positive with at most 2 decimal places", 400);
   }
+  const [whole, fraction = ""] = value.split(".");
+  const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
+  if (cents > 100000000n) throw new ApiError("amount must not exceed 1,000,000", 400);
   return value;
 }
 

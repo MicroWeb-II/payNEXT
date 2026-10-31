@@ -18,13 +18,13 @@ describe("idempotency store", () => {
     pool.query
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
       .mockResolvedValueOnce({ rows: [{ request_hash: `${"a".repeat(64)} `, response_status: 201, response_body: { ok: true } }] });
-    await expect(begin("user", "key", "a".repeat(64))).resolves.toEqual({
+    await expect(begin("user", "key", "/pay", "a".repeat(64))).resolves.toEqual({
       state: "replay", status: 201, body: { ok: true },
     });
 
     pool.query
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
       .mockResolvedValueOnce({ rows: [{ request_hash: "b".repeat(64), response_status: null }] });
-    await expect(begin("user", "key", "a".repeat(64))).resolves.toEqual({ state: "conflict" });
+    await expect(begin("user", "key", "/pay", "a".repeat(64))).resolves.toEqual({ state: "conflict" });
   });
 });

@@ -1,6 +1,7 @@
 const merchantModel = require("../models/merchantModel");
 const walletModel = require("../models/walletModel");
 const { ApiError, normalizeAmount, withTransaction, lockWallet, adjustBalance, logTx } = require("../services/moneyService");
+const audit = require('../models/auditModel');
 
 const createMerchant = async (req, res, next) => {
   try {
@@ -95,6 +96,7 @@ const payMerchant = async (req, res, next) => {
       return { paymentLog, newBalance };
     });
 
+    await audit.log({ actorUserId: req.user.sub, action: 'merchant_payment', entityType: 'merchant_payment', entityId: data.paymentLog.id, metadata: { amount: paymentAmount, merchantId }, ip: req.ip, userAgent: req.headers['user-agent'] });
     res.json({ success: true, message: "Payment successful", data });
   } catch (e) {
     next(e);

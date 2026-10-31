@@ -8,6 +8,7 @@ const {
   adjustBalance,
   logTx,
 } = require("../services/moneyService");
+const audit = require('../models/auditModel');
 
 const createRequest = async (req, res, next) => {
   try {
@@ -105,6 +106,7 @@ const approveRequest = async (req, res, next) => {
       return { paymentRequest: paid };
     });
 
+    await audit.log({ actorUserId: req.user.sub, action: 'payment_request_paid', entityType: 'payment_request', entityId: data.paymentRequest.id, metadata: { amount: data.paymentRequest.amount }, ip: req.ip, userAgent: req.headers['user-agent'] });
     res.json({ success: true, message: "Payment request paid", data });
   } catch (e) {
     next(e);

@@ -17,6 +17,29 @@ async function apiRequest(endpoint, options = {}) {
     ...options.headers,
   };
 
+  const method = (options.method || 'GET').toUpperCase();
+  const moneyMovement = method === 'POST' && (
+    /^\/wallets\/[^/]+\/(?:top-up|withdraw)$/.test(endpoint) ||
+    endpoint === '/transfers' ||
+    endpoint === '/merchants/pay' ||
+    /^\/payment-requests\/[^/]+\/approve$/.test(endpoint)
+  );
+  let generatedIdempotencyStorageKey;
+  if (moneyMovement && !headers['Idempotency-Key'] && !headers['idempotency-key']) {
+    const fingerprint = `${endpoint}:${options.body || ''}`;
+    generatedIdempotencyStorageKey = `paynext_idem:${fingerprint}`;
+    let idempotencyKey = sessionStorage.getItem(generatedIdempotencyStorageKey);
+    if (!idempotencyKey) {
+      const bytes = new Uint8Array(16);
+      globalThis.crypto.getRandomValues(bytes);
+      idempotencyKey = globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+      sessionStorage.setItem(generatedIdempotencyStorageKey, idempotencyKey);
+    }
+    headers['Idempotency-Key'] = idempotencyKey;
+  }
+
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -27,6 +50,9 @@ async function apiRequest(endpoint, options = {}) {
       ...options,
       headers,
     });
+    if (generatedIdempotencyStorageKey && response.status !== 409) {
+      sessionStorage.removeItem(generatedIdempotencyStorageKey);
+    }
   } catch (networkError) {
     const errorMsg = "Unable to connect to payNEXT server. Please check your network.";
     if (typeof showToast === "function") {

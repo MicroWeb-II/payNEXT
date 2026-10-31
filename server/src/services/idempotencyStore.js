@@ -19,23 +19,38 @@ function createRequestHash(req) {
     .digest("hex");
 }
 
-async function begin(userId, key, requestHash) {
+async function begin(userId, key, endpoint, requestHash) {
   const inserted = await pool.query(
-    `INSERT INTO idempotency_keys (user_id, key, request_hash)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (user_id, key) DO NOTHING
+    `INSERT INTO idempotency_keys (idempotency_key, key, user_id, endpoint, request_hash)
+     VALUES ($1, $1, $2, $3, $4)
+     ON CONFLICT (idempotency_key, user_id, endpoint) DO NOTHING
      RETURNING id`,
-    [userId, key, requestHash],
+    [key, userId, endpoint, requestHash],
   );
   if (inserted.rowCount) return { state: "new" };
 
   const existing = await pool.query(
-    `SELECT request_hash, response_status, response_body
-     FROM idempotency_keys WHERE user_id = $1 AND key = $2`,
-    [userId, key],
+    `SELECT request_hash, response_status, response_body, updated_at
+     FROM idempotency_keys
+     WHERE user_id = $1 AND idempotency_key = $2 AND endpoint = $3`,
+    [userId, key, endpoint],
   );
   const record = existing.rows[0];
-  if (!record || record.request_hash.trim() !== requestHash) {
+  if (!record) return { state: "processing" };
+
+  if (Date.now() - new Date(record.updated_at).getTime() > 24 * 60 * 60 * 1000) {
+    const reset = await pool.query(
+      `UPDATE idempotency_keys
+       SET request_hash = $4, response_status = NULL, response_body = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND idempotency_key = $2 AND endpoint = $3
+         AND updated_at = $5
+       RETURNING id`,
+      [userId, key, endpoint, requestHash, record.updated_at],
+    );
+    return reset.rowCount ? { state: "new" } : { state: "processing" };
+  }
+
+  if (!record.request_hash || record.request_hash.trim() !== requestHash) {
     return { state: "conflict" };
   }
   if (record.response_status !== null) {
@@ -48,19 +63,19 @@ async function begin(userId, key, requestHash) {
   return { state: "processing" };
 }
 
-async function complete(userId, key, status, body) {
+async function complete(userId, key, endpoint, status, body) {
   await pool.query(
     `UPDATE idempotency_keys
-     SET response_status = $3, response_body = $4
-     WHERE user_id = $1 AND key = $2`,
-    [userId, key, status, JSON.stringify(body)],
+     SET response_status = $4, response_body = $5, updated_at = CURRENT_TIMESTAMP
+     WHERE user_id = $1 AND idempotency_key = $2 AND endpoint = $3`,
+    [userId, key, endpoint, status, JSON.stringify(body)],
   );
 }
 
-async function remove(userId, key) {
+async function remove(userId, key, endpoint) {
   await pool.query(
-    "DELETE FROM idempotency_keys WHERE user_id = $1 AND key = $2",
-    [userId, key],
+    "DELETE FROM idempotency_keys WHERE user_id = $1 AND idempotency_key = $2 AND endpoint = $3",
+    [userId, key, endpoint],
   );
 }
 

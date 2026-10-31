@@ -1,18 +1,23 @@
-const { param, body, query } = require("express-validator");
+const { param, body, query } = require('express-validator');
 
-const uuidParam = (name = "id") =>
+const uuidParam = (name = 'id') =>
   param(name)
     .trim()
     .isUUID()
     .withMessage(`${name} must be a valid UUID`);
 
-const amount = (name = "amount") =>
+/**
+ * Amount validator: positive, max 2 decimal places, max $1,000,000
+ */
+const amount = (name = 'amount') =>
   body(name)
     .custom((value) => {
       const text = String(value);
-      return /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(text) && /[1-9]/.test(text);
+      if (!/^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(text) || !/[1-9]/.test(text)) return false;
+      const [whole, fraction = ""] = text.split(".");
+      return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0")) <= 100000000n;
     })
-    .withMessage(`${name} must be positive with at most 2 decimal places`);
+    .withMessage(`${name} must be positive, at most 1,000,000, and have at most 2 decimal places`);
 
 const walletId = (name) =>
   body(name)
@@ -20,23 +25,27 @@ const walletId = (name) =>
     .isUUID()
     .withMessage(`${name} must be a valid UUID`);
 
-const currency = body("currency")
+/**
+ * Currency validator: ISO 4217 uppercase 3-letter code, restricted to supported values
+ */
+const currency = body('currency')
   .optional()
   .trim()
-  .isIn(["USD", "BDT"])
-  .withMessage("Invalid currency");
+  .toUpperCase()
+  .isIn(['USD', 'BDT'])
+  .withMessage('Invalid currency — supported: USD, BDT');
 
-const note = body("note")
+const note = body('note')
   .optional()
   .trim()
   .isLength({ max: 500 })
-  .withMessage("Note must be at most 500 characters");
+  .withMessage('Note must be at most 500 characters');
 
-const description = body("description")
+const description = body('description')
   .optional()
   .trim()
   .isLength({ max: 500 })
-  .withMessage("Description must be at most 500 characters");
+  .withMessage('Description must be at most 500 characters');
 
 module.exports = {
   uuidParam,

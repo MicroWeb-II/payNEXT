@@ -15,7 +15,7 @@ module.exports = defineConfig({
       url: "http://127.0.0.1:3000/api/v1/health",
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
-      env: { NODE_ENV: "test", RATE_LIMIT_MAX: "100", JWT_SECRET: "paynext-e2e-secret" },
+      env: { NODE_ENV: "test", RATE_LIMIT_AUTH_MAX: "100", JWT_SECRET: "paynext-e2e-secret-at-least-32-characters" },
     },
     {
       command: "node tests/e2e/staticServer.js",

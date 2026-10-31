@@ -1,7 +1,7 @@
 const request = require("supertest");
 const app = require("../../src/app");
 const pool = require("../../src/config/db");
-const authLimiter = require("../../src/middleware/rateLimiter");
+const { authLimiter } = require("../../src/middleware/rateLimiter");
 
 let ipSequence = 1;
 let userSequence = 1;
@@ -28,7 +28,7 @@ async function balance(token, walletId) {
 }
 
 beforeEach(async () => {
-  await pool.query(`TRUNCATE TABLE idempotency_keys, merchant_payments, merchants,
+  await pool.query(`TRUNCATE TABLE audit_log, idempotency_keys, merchant_payments, merchants,
     gateway_transactions, payment_requests, transfers, transactions, wallets, users
     RESTART IDENTITY CASCADE`);
   await authLimiter.resetKey(rateLimitIp);

@@ -4,6 +4,8 @@ const router = express.Router();
 const requestController = require('../controllers/requestController');
 const { requireAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const { moneyLimiter } = require('../middleware/rateLimiter');
+const { readLimiter } = require('../middleware/rateLimiter');
 const idempotency = require('../middleware/idempotency');
 
 const {
@@ -38,11 +40,12 @@ router.post(
     requestController.createRequest,
 );
 
-router.get('/', requireAuth, requestController.myRequests);
+router.get('/', requireAuth, ...readLimiter, requestController.myRequests);
 
 router.get(
     '/:id',
     requireAuth,
+    ...readLimiter,
     uuidParam('id'),
     validate,
     requestController.getRequestById,
@@ -77,6 +80,7 @@ router.delete(
 router.post(
     '/:id/approve',
     requireAuth,
+    ...moneyLimiter,
     idempotency,
     [
         uuidParam('id'),
@@ -93,6 +97,7 @@ router.post(
 router.post(
     '/:id/decline',
     requireAuth,
+    ...moneyLimiter,
     uuidParam('id'),
     validate,
     requestController.declineRequest,

@@ -1,14 +1,16 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
 
-const transactionController = require("../controllers/transactionController");
-const { requireAuth } = require("../middleware/auth");
-const validate = require("../middleware/validate");
-const { query } = require("../middleware/validators");
+const transactionController = require('../controllers/transactionController');
+const { requireAuth } = require('../middleware/auth');
+const validate = require('../middleware/validate');
+const { readLimiter } = require('../middleware/rateLimiter');
+const { query } = require('../middleware/validators');
 
 router.get(
-  "/",
+  '/',
   requireAuth,
+  ...readLimiter,
   [
     query("limit")
       .optional()
@@ -27,7 +29,7 @@ router.get(
       .withMessage("Invalid transaction type"),
   ],
   validate,
-  transactionController.getHistory
+  transactionController.getHistory,
 );
 
 module.exports = router;
