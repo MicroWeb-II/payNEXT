@@ -68,7 +68,7 @@ const getTransactions = async (req, res, next) => {
     const limit = Math.min(Number(req.query.limit) || 20, 100);
     const offset = Number(req.query.offset) || 0;
 
-    const rows = await transactionModel.listByWallet(wallet.id, limit, offset);
+    const rows = await transactionModel.listByWallet(wallet.id, limit, offset, req.query.type || null);
     res.json({ success: true, count: rows.length, data: rows });
   } catch (e) {
     next(e);

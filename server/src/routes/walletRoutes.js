@@ -5,6 +5,7 @@ const walletController = require('../controllers/walletController');
 const moneyController = require('../controllers/moneyController');
 const { requireAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const idempotency = require('../middleware/idempotency');
 
 const {
     uuidParam,
@@ -56,6 +57,10 @@ router.get(
             .isInt({ min: 0 })
             .toInt()
             .withMessage('Offset must be a non-negative integer'),
+        query('type')
+            .optional()
+            .isIn(['top_up', 'withdrawal', 'transfer_in', 'transfer_out', 'request_in', 'request_out'])
+            .withMessage('Invalid transaction type'),
     ],
     validate,
     walletController.getTransactions,
@@ -64,6 +69,7 @@ router.get(
 router.post(
     '/:id/top-up',
     requireAuth,
+    idempotency,
     [
         uuidParam('id'),
         amount('amount'),
@@ -88,6 +94,7 @@ router.post(
 router.post(
     '/:id/withdraw',
     requireAuth,
+    idempotency,
     [
         uuidParam('id'),
         amount('amount'),

@@ -4,6 +4,7 @@ const router = express.Router();
 const requestController = require('../controllers/requestController');
 const { requireAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const idempotency = require('../middleware/idempotency');
 
 const {
     uuidParam,
@@ -15,6 +16,7 @@ const {
 router.post(
     '/',
     requireAuth,
+    idempotency,
     [
         walletId('requesterWalletId'),
 
@@ -49,6 +51,7 @@ router.get(
 router.put(
     '/:id',
     requireAuth,
+    idempotency,
     [
         uuidParam('id'),
         amount('amount'),
@@ -74,6 +77,7 @@ router.delete(
 router.post(
     '/:id/approve',
     requireAuth,
+    idempotency,
     [
         uuidParam('id'),
 

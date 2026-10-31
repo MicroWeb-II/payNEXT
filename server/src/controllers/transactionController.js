@@ -3,7 +3,7 @@ const walletModel = require("../models/walletModel");
 
 const getHistory = async (req, res, next) => {
   try {
-    const { limit = 10, offset = 0 } = req.query;
+    const { limit = 10, offset = 0, type = null } = req.query;
     
     // Find the user's wallet to get transactions
     const wallets = await walletModel.listByUser(req.user.sub);
@@ -12,7 +12,7 @@ const getHistory = async (req, res, next) => {
     }
     const wallet = wallets[0]; // Get the primary wallet
 
-    const transactions = await transactionModel.listByWallet(wallet.id, limit, offset);
+    const transactions = await transactionModel.listByWallet(wallet.id, limit, offset, type);
     
     res.json({ success: true, count: transactions.length, data: transactions });
   } catch (e) {

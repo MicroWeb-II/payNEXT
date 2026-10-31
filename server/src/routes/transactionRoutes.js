@@ -21,6 +21,10 @@ router.get(
       .isInt({ min: 0 })
       .toInt()
       .withMessage("Offset must be a non-negative integer"),
+    query("type")
+      .optional()
+      .isIn(["top_up", "withdrawal", "transfer_in", "transfer_out", "request_in", "request_out"])
+      .withMessage("Invalid transaction type"),
   ],
   validate,
   transactionController.getHistory

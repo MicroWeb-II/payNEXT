@@ -4,12 +4,14 @@ const router = express.Router();
 const moneyController = require('../controllers/moneyController');
 const { requireAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const idempotency = require('../middleware/idempotency');
 
 const { walletId, amount, body } = require('../middleware/validators');
 
 router.post(
     '/',
     requireAuth,
+    idempotency,
     [
         walletId('fromWalletId'),
 

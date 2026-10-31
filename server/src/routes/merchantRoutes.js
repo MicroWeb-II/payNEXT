@@ -4,6 +4,7 @@ const router = express.Router();
 const merchantController = require('../controllers/merchantController');
 const { requireAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const idempotency = require('../middleware/idempotency');
 
 const { uuidParam, amount, body } = require('../middleware/validators');
 
@@ -61,6 +62,7 @@ router.delete(
 router.post(
     '/pay',
     requireAuth,
+    idempotency,
     [
         body('merchantId')
             .trim()
