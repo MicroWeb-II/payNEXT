@@ -6,6 +6,9 @@ node_modules/
 .DS_Store
 dist/
 build/get-docker.sh
+/server/coverage/
+/server/test-results/
+/server/playwright-report/
 
 # Block all .env files everywhere
 **/.env

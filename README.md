@@ -95,6 +95,23 @@ Install these tools before running the project:
 - [Docker Compose](https://docs.docker.com/compose/)
 - [Git](https://git-scm.com/)
 
+### Database Migrations and Tests
+
+The API applies versioned `node-pg-migrate` migrations before it starts listening. For local API development, run migrations with `npm run migrate` from `server/` using the normal `DB_*` environment variables.
+
+The Jest integration suite uses a disposable PostgreSQL 16 container. From `server/`:
+
+```bash
+npm ci
+npm run test:db:up
+DB_HOST=localhost DB_PORT=55432 DB_USER=paynext_test DB_PASSWORD=paynext_test DB_NAME=paynext_test npm test
+npx playwright install chromium
+DB_HOST=localhost DB_PORT=55432 DB_USER=paynext_test DB_PASSWORD=paynext_test DB_NAME=paynext_test npm run test:e2e
+npm run test:db:down
+```
+
+`npm run test:ci` runs Jest serially with coverage. GitHub Actions provides its own PostgreSQL service and runs both Jest and the Playwright smoke test on every push and pull request.
+
 ### Stopping the Application
 
 Stop the containers with:
