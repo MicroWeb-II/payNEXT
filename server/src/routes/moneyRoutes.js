@@ -4,30 +4,27 @@ const router = express.Router();
 const moneyController = require('../controllers/moneyController');
 const { requireAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const { moneyLimiter } = require('../middleware/rateLimiter');
+const idempotency = require('../middleware/idempotency');
 
 const { walletId, amount, body } = require('../middleware/validators');
 
 router.post(
-    '/',
-    requireAuth,
-    [
-        walletId('fromWalletId'),
-
-        amount('amount'),
-
-        body('toWalletNumber')
-            .trim()
-            .matches(/^PAYNX-[0-9]{6}$/)
-            .withMessage('Invalid wallet number'),
-
-        body('note')
-            .optional()
-            .trim()
-            .isLength({ max: 500 })
-            .withMessage('Note is too long'),
-    ],
-    validate,
-    moneyController.sendMoney,
+  '/',
+  requireAuth,
+  moneyLimiter,
+  idempotency,
+  [
+    walletId('fromWalletId'),
+    amount('amount'),
+    body('toWalletNumber')
+      .trim()
+      .matches(/^PAYNX-[0-9]{6}$/)
+      .withMessage('Invalid wallet number'),
+    body('note').optional().trim().isLength({ max: 500 }).withMessage('Note is too long'),
+  ],
+  validate,
+  moneyController.sendMoney,
 );
 
 module.exports = router;

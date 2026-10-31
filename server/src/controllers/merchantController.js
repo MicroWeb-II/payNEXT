@@ -1,6 +1,7 @@
 const merchantModel = require("../models/merchantModel");
 const walletModel = require("../models/walletModel");
 const { ApiError, withTransaction, lockWallet, setBalance, logTx } = require("../services/moneyService");
+const audit = require('../models/auditModel');
 
 const createMerchant = async (req, res, next) => {
   try {
@@ -55,8 +56,9 @@ const deleteMerchant = async (req, res, next) => {
 
 const payMerchant = async (req, res, next) => {
   try {
-    const { merchantId, amount } = req.body;
-    if (!merchantId || !amount || amount <= 0) {
+    const { merchantId } = req.body;
+    const amount = Number(req.body.amount);
+    if (!merchantId || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000 || !/^\d+(?:\.\d{1,2})?$/.test(String(req.body.amount))) {
       throw new ApiError("Valid merchantId and amount > 0 are required", 400);
     }
 
@@ -98,6 +100,7 @@ const payMerchant = async (req, res, next) => {
       return { paymentLog, newBalance };
     });
 
+    await audit.log({ actorUserId: req.user.sub, action: 'merchant_payment', entityType: 'merchant_payment', entityId: data.paymentLog.id, metadata: { amount, merchantId }, ip: req.ip, userAgent: req.headers['user-agent'] });
     res.json({ success: true, message: "Payment successful", data });
   } catch (e) {
     next(e);

@@ -4,6 +4,8 @@ const router = express.Router();
 const requestController = require('../controllers/requestController');
 const { requireAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const { moneyLimiter } = require('../middleware/rateLimiter');
+const idempotency = require('../middleware/idempotency');
 
 const {
     uuidParam,
@@ -74,6 +76,8 @@ router.delete(
 router.post(
     '/:id/approve',
     requireAuth,
+    ...moneyLimiter,
+    idempotency,
     [
         uuidParam('id'),
 

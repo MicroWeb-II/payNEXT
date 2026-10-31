@@ -119,3 +119,48 @@ CREATE TABLE merchant_payments (
 
 CREATE INDEX idx_merchant_payments_merchant ON merchant_payments(merchant_id);
 CREATE INDEX idx_merchant_payments_wallet ON merchant_payments(wallet_id);
+
+-- 9. IDEMPOTENCY KEYS
+-- Stores idempotency key + user + endpoint + response to prevent duplicate money movements.
+-- TTL enforced at application level (keys older than 24h are treated as expired).
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    idempotency_key VARCHAR(255) NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint VARCHAR(255) NOT NULL,
+    response_status INT,
+    response_body JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_idempotency_keys_unique
+    ON idempotency_keys(idempotency_key, user_id, endpoint);
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created_at
+    ON idempotency_keys(created_at);
+
+-- 10. AUDIT LOG
+-- Append-only log of all security-sensitive events.
+CREATE TABLE IF NOT EXISTS audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    action VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(100),
+    entity_id UUID,
+    metadata JSONB,
+    ip VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
+-- Append-only: revoke destructive privileges from the application role
+-- REVOKE UPDATE, DELETE ON audit_log FROM paynext_app_user;
+REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM PUBLIC;
+CREATE OR REPLACE FUNCTION prevent_audit_log_mutation() RETURNS trigger AS $$
+BEGIN
+    RAISE EXCEPTION 'audit_log is append-only';
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS audit_log_append_only ON audit_log;
+CREATE TRIGGER audit_log_append_only BEFORE UPDATE OR DELETE ON audit_log
+    FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_mutation();
