@@ -53,6 +53,9 @@ services:
     image: caddy:2
     container_name: paynext-caddy
     restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      WWW_DOMAIN: ${WWW_DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"

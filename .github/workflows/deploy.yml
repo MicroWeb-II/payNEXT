@@ -21,13 +21,14 @@ jobs:
       - name: Check required files
         run: |
           test -f docker-compose.yml
+          test -f Caddyfile
           test -f client/Dockerfile
           test -f client/nginx.conf
           test -f client/public/index.html
           test -f db/init.sql
 
       - name: Create dummy .env file
-        run: echo "JWT_SECRET=super_secret_test_key" > .env
+        run: echo "JWT_SECRET=super_secret_test_key_at_least_32_chars" > .env
 
       - name: Validate Docker Compose file
         run: docker compose -f docker-compose.yml config > /dev/null
@@ -39,7 +40,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment:
       name: production
-      env:
+    env:
       SERVER_IP: ${{ secrets.SERVER_IP }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -48,6 +49,9 @@ jobs:
       DB_NAME: ${{ secrets.DB_NAME }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      DOMAIN: ${{ secrets.DOMAIN }}
+      WWW_DOMAIN: ${{ secrets.WWW_DOMAIN }}
+      ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -63,8 +67,12 @@ jobs:
         run: ssh "$SSH_USER@$SERVER_IP" "mkdir -p /opt/paynext"
 
       - name: Build server .env on the runner
+        # NOTE: .env is NEVER included in the deploy tarball.
+        # It is built here from GitHub Secrets and SCP'd directly to the server.
         run: |
           {
+            echo "NODE_ENV=production"
+            echo "PORT=3000"
             echo "DB_HOST=$DB_HOST"
             echo "DB_PORT=5432"
             echo "DB_USER=$DB_USER"
@@ -72,13 +80,19 @@ jobs:
             echo "DB_NAME=$DB_NAME"
             echo "DB_SSL=true"
             echo "JWT_SECRET=$JWT_SECRET"
+            echo "ALLOWED_ORIGINS=$ALLOWED_ORIGINS"
+            echo "DOMAIN=$DOMAIN"
+            echo "WWW_DOMAIN=$WWW_DOMAIN"
           } > server.env
 
       - name: Copy app and .env to server
         run: |
-          tar --exclude='./.git' --exclude='./.github' -czf paynext.tgz docker-compose.yml client db
+          # Caddyfile is included so the server has the templated config.
+          # .env is NOT in the tarball — it is SCP'd separately as server.env -> .env
+          tar --exclude='./.git' --exclude='./.github' --exclude='.env' --exclude='*/.env' --exclude='**/.env' -czf paynext.tgz docker-compose.yml Caddyfile client server db
           scp paynext.tgz "$SSH_USER@$SERVER_IP":/tmp/paynext.tgz
           scp server.env "$SSH_USER@$SERVER_IP":/opt/paynext/.env
+          ssh "$SSH_USER@$SERVER_IP" "chmod 600 /opt/paynext/.env"
           rm -f server.env paynext.tgz
 
       - name: Deploy using Docker
@@ -87,9 +101,18 @@ jobs:
           set -e
           cd /opt/paynext
           docker compose down --remove-orphans || true
-          rm -rf client db docker-compose.yml
+          rm -rf client server db docker-compose.yml Caddyfile
           tar -xzf /tmp/paynext.tgz
           rm -f /tmp/paynext.tgz
           docker compose up -d --build
+          docker compose exec -T caddy caddy validate --config /etc/caddy/Caddyfile
           docker image prune -f
           EOF
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "https://${DOMAIN}/api/v1/health"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 30 ]; then exit 1; fi
+            sleep 5
+          done
