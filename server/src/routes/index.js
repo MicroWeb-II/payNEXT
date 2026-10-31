@@ -8,14 +8,20 @@ const moneyRoutes = require("./moneyRoutes");
 const requestRoutes = require("./requestRoutes");
 const transactionRoutes = require("./transactionRoutes");
 const merchantRoutes = require("./merchantRoutes");
+const pool = require("../config/db");
 
-router.get("/health", (req, res) =>
-  res.json({
-    success: true,
-    service: "paynext-api",
-    time: new Date().toISOString(),
-  }),
-);
+router.get("/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({
+      success: true,
+      service: "paynext-api",
+      time: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(503).json({ success: false, service: "paynext-api" });
+  }
+});
 
 // Mount team routes
 router.use("/auth", authRoutes);

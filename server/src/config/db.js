@@ -9,6 +9,9 @@ const pool = new Pool({
   user: process.env.DB_USER || "paynext",
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME || "paynext_db",
+  max: Number(process.env.DB_POOL_MAX || 10),
+  idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
+  connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
   ssl:
     process.env.DB_SSL === "true" || isNeon
       ? { rejectUnauthorized: false }
