@@ -1,6 +1,12 @@
 node_modules
 npm-debug.log
 .env
+.env.*
 coverage
 test-results
 playwright-report
+tests
+docker-compose.test.yml
+playwright.config.js
+jest.config.js
+*.md
