@@ -1,95 +1,224 @@
-name: payNEXT CI/CD
+name: Deploy
 
+# Reusable deploy of an already-built, SHA-tagged release to a GitHub
+# Environment ("staging" or "production"). Called by CI/CD after every merge to
+# main (staging), or run manually to promote a SHA to production or to roll back.
+#
+# Each Environment holds its own secrets (see docs/runbooks/deploy-staging.md):
+#   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS (recommended),
+#   DOMAIN, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET
+#   optional: WWW_DOMAIN, DB_HOST, DB_SSL, ALLOWED_ORIGINS, METRICS_TOKEN
+# and optionally the variable DEPLOY_PATH (default /opt/paynext).
 on:
-  push:
-    branches: [devs, release, main]
-  pull_request:
-    branches: [release, main]
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      image_tag:
+        type: string
+        required: true
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
+      action:
+        description: deploy a SHA, or roll back to the previous release
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+      image_tag:
+        description: Full Git SHA of a commit whose images CI published (required for deploy)
+        type: string
+        required: false
 
-concurrency:
-  group: paynext-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+permissions:
+  contents: read
+  packages: read
 
 jobs:
-  validate:
-    name: Validate Project
+  deploy:
+    name: ${{ inputs.action || 'deploy' }} ${{ inputs.environment }}
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check required files
-        run: |
-          test -f docker-compose.yml
-          test -f client/Dockerfile
-          test -f client/nginx.conf
-          test -f client/public/index.html
-          test -f db/init.sql
-
-      - name: Create dummy .env file
-        run: echo "JWT_SECRET=super_secret_test_key" > .env
-
-      - name: Validate Docker Compose file
-        run: docker compose -f docker-compose.yml config > /dev/null
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: validate
-    if: github.ref == 'refs/heads/main'
     environment:
-      name: production
-      env:
-      SERVER_IP: ${{ secrets.SERVER_IP }}
+      name: ${{ inputs.environment }}
+      url: ${{ steps.config.outputs.url }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      ACTION: ${{ inputs.action || 'deploy' }}
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/paynext' }}
+      SSH_HOST: ${{ secrets.SSH_HOST || secrets.SERVER_IP }}
       SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_NAME: ${{ secrets.DB_NAME }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      DOMAIN: ${{ secrets.DOMAIN }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup SSH
+      - name: Check environment configuration
+        id: config
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 700 ~/.ssh
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+          missing=()
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY DOMAIN DB_USER DB_PASSWORD DB_NAME JWT_SECRET; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            {
+              echo "### ${{ inputs.environment }} deploy skipped"
+              echo "The \`${{ inputs.environment }}\` GitHub Environment is missing: ${missing[*]}."
+              echo "See docs/runbooks/deploy-staging.md for the one-time setup."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::${{ inputs.environment }} deploy skipped; missing environment secrets: ${missing[*]}"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${#JWT_SECRET}" -lt 32 ]; then
+            echo "::error::JWT_SECRET must be at least 32 characters"; exit 1
+          fi
+          if [ "$ACTION" = "deploy" ] && ! [[ "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::image_tag must be a full 40-character Git SHA (got '$IMAGE_TAG')"; exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "url=https://${DOMAIN}" >> "$GITHUB_OUTPUT"
 
-      - name: Create deployment folder on server
-        run: ssh "$SSH_USER@$SERVER_IP" "mkdir -p /opt/paynext"
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.ready == 'true'
 
-      - name: Build server .env on the runner
+      - name: Configure SSH
+        if: steps.config.outputs.ready == 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::SSH_KNOWN_HOSTS is not set; trusting the host key on first use. Set it to pin the server's key."
+            ssh-keyscan -H "$SSH_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          cat > ~/.ssh/config <<CFG
+          Host target
+            HostName ${SSH_HOST}
+            User ${SSH_USER}
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          CFG
+
+      - name: Write host environment file from secrets
+        if: steps.config.outputs.ready == 'true' && env.ACTION == 'deploy'
+        env:
+          WWW_DOMAIN: ${{ secrets.WWW_DOMAIN }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_SSL: ${{ secrets.DB_SSL }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+        run: |
+          umask 077
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          {
+            echo "IMAGE_REGISTRY=ghcr.io/${owner}"
+            echo "IMAGE_TAG=${IMAGE_TAG}"
+            echo "NODE_ENV=production"
+            echo "PORT=3000"
+            echo "LOG_LEVEL=info"
+            echo "DOMAIN=${DOMAIN}"
+            echo "WWW_DOMAIN=${WWW_DOMAIN}"
+            echo "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}"
+            echo "DB_HOST=${DB_HOST:-db}"
+            echo "DB_PORT=5432"
+            echo "DB_USER=${DB_USER}"
+            echo "DB_PASSWORD=${DB_PASSWORD}"
+            echo "DB_NAME=${DB_NAME}"
+            echo "DB_SSL=${DB_SSL:-false}"
+            echo "JWT_SECRET=${JWT_SECRET}"
+            echo "COOKIE_SECURE=true"
+            echo "METRICS_TOKEN=${METRICS_TOKEN}"
+            echo "BACKUP_DIR=./backups"
+            echo "BACKUP_RETENTION_DAYS=7"
+          } > host.env
+
+      - name: Upload deploy bundle (no secrets, no source code)
+        if: steps.config.outputs.ready == 'true' && env.ACTION == 'deploy'
+        run: |
+          # Images are prebuilt; the host only needs the compose file, the
+          # templated Caddyfile and the ops scripts. .env travels separately.
+          tar -czf bundle.tgz docker-compose.yml Caddyfile ops
+          ssh target "mkdir -p '$DEPLOY_PATH'"
+          scp -q bundle.tgz target:/tmp/paynext-bundle.tgz
+          scp -q host.env target:"$DEPLOY_PATH/.env.incoming"
+          ssh target "set -e; cd '$DEPLOY_PATH'; tar -xzf /tmp/paynext-bundle.tgz; rm -f /tmp/paynext-bundle.tgz; \
+            chmod 600 .env.incoming; mv .env.incoming .env; chmod +x ops/*/*.sh"
+          rm -f host.env bundle.tgz
+
+      - name: Deploy ${{ inputs.image_tag }}
+        if: steps.config.outputs.ready == 'true' && env.ACTION == 'deploy'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | ssh target "docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null"
+          status=0
+          ssh target "cd '$DEPLOY_PATH' && ./ops/deploy/deploy.sh deploy '$IMAGE_TAG'" || status=$?
+          ssh target "docker logout ghcr.io >/dev/null" || true
+          exit "$status"
+
+      - name: Roll back to the previous release
+        if: steps.config.outputs.ready == 'true' && env.ACTION == 'rollback'
+        run: ssh target "cd '$DEPLOY_PATH' && ./ops/deploy/deploy.sh rollback ${IMAGE_TAG:+'$IMAGE_TAG'}"
+
+      - name: Smoke tests
+        id: smoke
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          check() {
+            local url="$1"
+            for attempt in $(seq 1 20); do
+              if body="$(curl -fsS --max-time 10 "$url")"; then
+                echo "OK  $url -> $body"
+                return 0
+              fi
+              sleep 6
+            done
+            echo "::error::smoke test failed: $url"
+            return 1
+          }
+          check "https://${DOMAIN}/healthz"
+          check "https://${DOMAIN}/api/v1/health"
+          curl -fsS "https://${DOMAIN}/api/v1/health" | grep -q '"database":"ok"' \
+            || { echo "::error::API reports the database as unavailable"; exit 1; }
+
+      - name: Automatic rollback after failed smoke tests
+        if: failure() && steps.smoke.conclusion == 'failure' && env.ACTION == 'deploy'
+        run: |
+          echo "::error::Smoke tests failed for ${IMAGE_TAG}; rolling back to the previous release"
+          ssh target "cd '$DEPLOY_PATH' && ./ops/deploy/deploy.sh rollback"
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "https://${DOMAIN}/api/v1/health"
+
+      - name: Summary
+        if: always() && steps.config.outputs.ready == 'true'
         run: |
           {
-            echo "DB_HOST=$DB_HOST"
-            echo "DB_PORT=5432"
-            echo "DB_USER=$DB_USER"
-            echo "DB_PASSWORD=$DB_PASSWORD"
-            echo "DB_NAME=$DB_NAME"
-            echo "DB_SSL=true"
-            echo "JWT_SECRET=$JWT_SECRET"
-          } > server.env
+            echo "### ${ACTION} ${{ inputs.environment }}"
+            echo "- Release: \`${IMAGE_TAG:-previous}\`"
+            echo "- URL: https://${DOMAIN}"
+            echo "- Smoke tests: ${{ steps.smoke.conclusion }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          ssh target "cd '$DEPLOY_PATH' && ./ops/deploy/deploy.sh status" >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
 
-      - name: Copy app and .env to server
-        run: |
-          tar --exclude='./.git' --exclude='./.github' -czf paynext.tgz docker-compose.yml client db
-          scp paynext.tgz "$SSH_USER@$SERVER_IP":/tmp/paynext.tgz
-          scp server.env "$SSH_USER@$SERVER_IP":/opt/paynext/.env
-          rm -f server.env paynext.tgz
-
-      - name: Deploy using Docker
-        run: |
-          ssh "$SSH_USER@$SERVER_IP" << 'EOF'
-          set -e
-          cd /opt/paynext
-          docker compose down --remove-orphans || true
-          rm -rf client db docker-compose.yml
-          tar -xzf /tmp/paynext.tgz
-          rm -f /tmp/paynext.tgz
-          docker compose up -d --build
-          docker image prune -f
-          EOF
+      - name: Remove SSH key
+        if: always()
+        run: rm -rf ~/.ssh

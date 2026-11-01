@@ -1,14 +1,31 @@
+# Dependencies and build output
 node_modules/
-.env
-.env.local
-.env.production
-*.log
-.DS_Store
 dist/
-build/get-docker.sh
+build/
 
-# Block all .env files everywhere
-**/.env
+# Secrets: never commit any .env file (templates are *.env.example)
 .env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Test and tool output
+/server/coverage/
+/server/test-results/
+/server/playwright-report/
+/zap-report/
+*.log
+
+# Local runtime data
+/backups/
+/.release/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
 .agents
 skills-lock.json

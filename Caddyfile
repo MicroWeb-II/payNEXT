@@ -1,13 +1,36 @@
-paynextt.me, www.paynextt.me, localhost {
+# DOMAIN and WWW_DOMAIN come from the host's .env (see .env.example).
+# Caddy obtains and renews Let's Encrypt certificates automatically and
+# redirects HTTP to HTTPS.
+{$DOMAIN} {$WWW_DOMAIN} {
+	encode zstd gzip
 
-    encode zstd gzip
+	# Headers common to every response; the web and API containers add
+	# their own content-specific headers (CSP, frame options, ...).
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+		-Via
+		-X-Powered-By
+	}
 
-    handle /api/* {
-    	reverse_proxy api:3000
-    }
+	log {
+		output stdout
+		format json
+	}
 
-    handle {
-    	reverse_proxy web:80
-    }
+	# Prometheus metrics stay on the internal network only.
+	handle /metrics* {
+		respond 404
+	}
 
+	handle /api/* {
+		reverse_proxy api:3000 {
+			health_uri /healthz
+			health_interval 10s
+		}
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
 }

@@ -1,29 +1,19 @@
-const express = require("express");
+const express = require('express');
+const transactionController = require('../controllers/transactionController');
+const { requireAuth } = require('../middleware/auth');
+const { readLimiter } = require('../middleware/rateLimiter');
+const validate = require('../middleware/validate');
+const v = require('../middleware/validators');
+
 const router = express.Router();
 
-const transactionController = require("../controllers/transactionController");
-const { requireAuth } = require("../middleware/auth");
-const validate = require("../middleware/validate");
-const { query } = require("../middleware/validators");
-
 router.get(
-  "/",
+  '/',
   requireAuth,
-  [
-    query("limit")
-      .optional()
-      .isInt({ min: 1, max: 100 })
-      .toInt()
-      .withMessage("Limit must be between 1 and 100"),
-
-    query("offset")
-      .optional()
-      .isInt({ min: 0 })
-      .toInt()
-      .withMessage("Offset must be a non-negative integer"),
-  ],
+  ...readLimiter,
+  [...v.pagination, v.transactionType, v.query('walletId').optional().isUUID().withMessage('walletId must be a valid UUID')],
   validate,
-  transactionController.getHistory
+  transactionController.getHistory,
 );
 
 module.exports = router;

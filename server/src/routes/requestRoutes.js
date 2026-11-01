@@ -1,97 +1,40 @@
 const express = require('express');
-const router = express.Router();
-
 const requestController = require('../controllers/requestController');
 const { requireAuth } = require('../middleware/auth');
+const { moneyLimiter, readLimiter, writeLimiter } = require('../middleware/rateLimiter');
+const idempotency = require('../middleware/idempotency');
 const validate = require('../middleware/validate');
+const v = require('../middleware/validators');
 
-const {
-    uuidParam,
-    walletId,
-    amount,
-    body,
-} = require('../middleware/validators');
+const router = express.Router();
+router.use(requireAuth);
 
 router.post(
-    '/',
-    requireAuth,
-    [
-        walletId('requesterWalletId'),
-
-        body('payerEmail')
-            .trim()
-            .normalizeEmail()
-            .isEmail()
-            .withMessage('Invalid payer email'),
-
-        amount('amount'),
-
-        body('note')
-            .optional()
-            .trim()
-            .isLength({ max: 500 })
-            .withMessage('Note is too long'),
-    ],
-    validate,
-    requestController.createRequest,
+  '/',
+  ...writeLimiter,
+  [v.walletId('requesterWalletId'), v.email('payerEmail'), v.amount('amount'), v.note],
+  validate,
+  idempotency,
+  requestController.createRequest,
 );
-
-router.get('/', requireAuth, requestController.myRequests);
-
-router.get(
-    '/:id',
-    requireAuth,
-    uuidParam('id'),
-    validate,
-    requestController.getRequestById,
-);
-
+router.get('/', ...readLimiter, requestController.myRequests);
+router.get('/:id', ...readLimiter, v.uuidParam('id'), validate, requestController.getRequestById);
 router.put(
-    '/:id',
-    requireAuth,
-    [
-        uuidParam('id'),
-        amount('amount'),
-
-        body('note')
-            .optional()
-            .trim()
-            .isLength({ max: 500 })
-            .withMessage('Note is too long'),
-    ],
-    validate,
-    requestController.updateRequest,
+  '/:id',
+  ...writeLimiter,
+  [v.uuidParam('id'), v.amount('amount'), v.note],
+  validate,
+  requestController.updateRequest,
 );
-
-router.delete(
-    '/:id',
-    requireAuth,
-    uuidParam('id'),
-    validate,
-    requestController.deleteRequest,
-);
-
+router.delete('/:id', ...writeLimiter, v.uuidParam('id'), validate, requestController.cancelRequest);
 router.post(
-    '/:id/approve',
-    requireAuth,
-    [
-        uuidParam('id'),
-
-        body('fromWalletId')
-            .trim()
-            .isUUID()
-            .withMessage('fromWalletId must be a valid UUID'),
-    ],
-    validate,
-    requestController.approveRequest,
+  '/:id/approve',
+  ...moneyLimiter,
+  [v.uuidParam('id'), v.walletId('fromWalletId')],
+  validate,
+  idempotency,
+  requestController.approveRequest,
 );
-
-router.post(
-    '/:id/decline',
-    requireAuth,
-    uuidParam('id'),
-    validate,
-    requestController.declineRequest,
-);
+router.post('/:id/decline', ...writeLimiter, v.uuidParam('id'), validate, requestController.declineRequest);
 
 module.exports = router;
