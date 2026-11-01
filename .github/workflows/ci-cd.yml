@@ -1,0 +1,218 @@
+name: payNEXT CI/CD
+
+# Every push and pull request: validate, test (unit, integration, e2e),
+# audit dependencies, build SHA-tagged images and scan them with Trivy.
+# Pushes to main also publish the images to GHCR and deploy them to staging.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  TRIVY_IMAGE: aquasec/trivy:0.69.3
+
+jobs:
+  validate:
+    name: Validate configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Required files
+        run: |
+          for f in docker-compose.yml Caddyfile .env.example client/Dockerfile client/nginx.conf \
+                   server/Dockerfile server/migrations/001_init.js ops/deploy/deploy.sh; do
+            test -f "$f" || { echo "::error file=$f::missing"; exit 1; }
+          done
+
+      - name: Docker Compose file is valid
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+          rm .env
+
+      - name: Shell scripts pass ShellCheck
+        run: shellcheck -x ops/deploy/*.sh ops/backup/*.sh ops/postgres/*.sh
+
+      - name: Client scripts parse
+        run: for f in $(find client/public/js -name '*.js'); do node --check "$f"; done
+
+  test:
+    name: Unit and integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: paynext_test
+          POSTGRES_PASSWORD: paynext_test
+          POSTGRES_DB: paynext_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U paynext_test -d paynext_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: paynext_test
+      DB_PASSWORD: paynext_test
+      DB_NAME: paynext_test
+      JWT_SECRET: paynext-ci-test-secret-at-least-32-characters
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Jest (coverage thresholds enforced)
+        run: npm run test:ci
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f coverage/lcov-report/index.html ]; then
+            echo "Coverage report uploaded as an artifact." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: server/coverage
+          retention-days: 14
+
+  e2e:
+    name: Browser smoke test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: paynext_test
+          POSTGRES_PASSWORD: paynext_test
+          POSTGRES_DB: paynext_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U paynext_test -d paynext_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: "true"
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: paynext_test
+      DB_PASSWORD: paynext_test
+      DB_NAME: paynext_test
+      JWT_SECRET: paynext-ci-test-secret-at-least-32-characters
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Apply migrations
+        run: npm run migrate
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            server/playwright-report
+            server/test-results
+          retention-days: 14
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: npm audit (production dependencies, fail on high/critical)
+        working-directory: server
+        run: npm audit --omit=dev --audit-level=high
+
+  images:
+    name: Build and scan ${{ matrix.component }} image
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: api
+            context: server
+          - component: web
+            context: client
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image reference
+        id: meta
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "ref=ghcr.io/${owner}/paynext-${{ matrix.component }}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (tagged with the Git SHA only; never "latest")
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          load: true
+          tags: ${{ steps.meta.outputs.ref }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+      - name: Trivy scan (fail on fixable high/critical)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache" \
+            "$TRIVY_IMAGE" image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress \
+            "${{ steps.meta.outputs.ref }}"
+
+      - name: Publish to GHCR (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${{ steps.meta.outputs.ref }}"
+          echo "Published \`${{ steps.meta.outputs.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-staging:
+    name: Deploy to staging
+    needs: [test, e2e, audit, images]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      image_tag: ${{ github.sha }}
+    secrets: inherit

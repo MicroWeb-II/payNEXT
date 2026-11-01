@@ -1,87 +1,51 @@
-function renderRegister() {
-  return `
-    <section class="card">
-      <h1>Create your account</h1>
-      <p class="muted">Register to get started.</p>
-
-      <div id="register-message" aria-live="polite"></div>
-
-      <form id="register-form">
-        <div class="form-group">
-          <label for="register-name">Full name</label>
-          <input id="register-name" name="fullName" type="text"
-            autocomplete="name" maxlength="100" required>
-        </div>
-
-        <div class="form-group">
-          <label for="register-email">Email</label>
-          <input id="register-email" name="email" type="email"
-            autocomplete="email" required>
-        </div>
-
-        <div class="form-group">
-          <label for="register-phone">Phone (optional)</label>
-          <input id="register-phone" name="phone" type="tel"
-            autocomplete="tel" placeholder="01712345678">
-        </div>
-
-        <div class="form-group">
-          <label for="register-password">Password</label>
-          <input id="register-password" name="password" type="password"
-            autocomplete="new-password" minlength="8" required>
-        </div>
-
-        <button class="button form-button" type="submit">
-          Create account
-        </button>
-      </form>
-
-      <p class="muted">
-        Already registered? <a href="#/login">Log in</a>.
-      </p>
-    </section>
-  `;
-}
+/**
+ * Registration view. Markup lives in index.html (#register-view).
+ * The password rule matches the API: at least 8 characters, with at least one
+ * letter and one number.
+ */
+const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+const PASSWORD_RULE_TEXT = "Password must be at least 8 characters and include a letter and a number.";
 
 function initRegister() {
   const form = document.getElementById("register-form");
+  const errorBox = document.getElementById("register-error");
   if (!form) return;
+  setFormError(errorBox, "");
+  if (form.dataset.bound === "true") return;
+  form.dataset.bound = "true";
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submitBtn = document.getElementById("register-submit-btn");
+    const fullName = document.getElementById("register-name").value.trim();
+    const email = document.getElementById("register-email").value.trim();
+    const password = document.getElementById("register-password").value;
+    const phone = document.getElementById("register-phone").value.trim();
 
-    const button = form.querySelector('button[type="submit"]');
-    const message = document.getElementById("register-message");
-
-    const fullName = form.elements.fullName.value.trim();
-    const email = form.elements.email.value.trim();
-    const phone = form.elements.phone.value.trim();
-    const password = form.elements.password.value;
-
-    if (password.length < 8) {
-      message.className = "message message-error";
-      message.textContent = "Password must be at least 8 characters.";
+    if (!fullName || !email || !password) {
+      setFormError(errorBox, "Please fill in all required fields.");
+      return;
+    }
+    if (!PASSWORD_RULE.test(password)) {
+      setFormError(errorBox, PASSWORD_RULE_TEXT);
       return;
     }
 
-    button.disabled = true;
-    message.textContent = "";
-
+    setFormError(errorBox, "");
+    setButtonLoading(submitBtn, true, "Creating account...");
     try {
       await Auth.register(fullName, email, password, phone);
-
-      if (Auth.isLoggedIn()) {
-        window.location.hash = "#/dashboard";
-      } else {
-        message.className = "message message-success";
-        message.textContent = "Registration successful. Please log in.";
-        form.reset();
-      }
+      form.reset();
+      showToast("Account created. Welcome to payNEXT!", "success");
+      window.location.hash = Auth.isAuthenticated() ? "#/dashboard" : "#/login";
     } catch (error) {
-      message.className = "message message-error";
-      message.textContent = error.message || "Registration failed.";
+      const message = error.message || "Registration failed. Please try again.";
+      setFormError(errorBox, message);
+      showToast(message, "error");
     } finally {
-      button.disabled = false;
+      setButtonLoading(submitBtn, false);
     }
   });
 }
+
+window.initRegister = initRegister;

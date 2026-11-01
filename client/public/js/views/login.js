@@ -1,59 +1,40 @@
-function renderLogin() {
-  return `
-    <section class="card">
-      <h1>Welcome back</h1>
-      <p class="muted">Log in to access your account.</p>
-
-      <div id="login-message" aria-live="polite"></div>
-
-      <form id="login-form">
-        <div class="form-group">
-          <label for="login-email">Email</label>
-          <input id="login-email" name="email" type="email"
-            autocomplete="email" required>
-        </div>
-
-        <div class="form-group">
-          <label for="login-password">Password</label>
-          <input id="login-password" name="password" type="password"
-            autocomplete="current-password" required>
-        </div>
-
-        <button class="button form-button" type="submit">
-          Log in
-        </button>
-      </form>
-
-      <p class="muted">
-        New here? <a href="#/register">Create an account</a>.
-      </p>
-    </section>
-  `;
-}
-
+/**
+ * Login view. Markup lives in index.html (#login-view); this binds behaviour.
+ */
 function initLogin() {
   const form = document.getElementById("login-form");
+  const errorBox = document.getElementById("login-error");
   if (!form) return;
+  setFormError(errorBox, "");
+  if (form.dataset.bound === "true") return;
+  form.dataset.bound = "true";
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submitBtn = document.getElementById("login-submit-btn");
+    const email = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
 
-    const button = form.querySelector('button[type="submit"]');
-    const message = document.getElementById("login-message");
-    const email = form.elements.email.value.trim();
-    const password = form.elements.password.value;
+    if (!email || !password) {
+      setFormError(errorBox, "Please enter both email and password.");
+      return;
+    }
 
-    button.disabled = true;
-    message.textContent = "";
-
+    setFormError(errorBox, "");
+    setButtonLoading(submitBtn, true, "Signing in...");
     try {
       await Auth.login(email, password);
+      form.reset();
+      showToast("Welcome back!", "success");
       window.location.hash = "#/dashboard";
     } catch (error) {
-      message.className = "message message-error";
-      message.textContent = error.message || "Login failed.";
+      const message = error.message || "Sign in failed. Please check your details.";
+      setFormError(errorBox, message);
+      showToast(message, "error");
     } finally {
-      button.disabled = false;
+      setButtonLoading(submitBtn, false);
     }
   });
 }
+
+window.initLogin = initLogin;

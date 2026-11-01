@@ -1,112 +1,30 @@
 const express = require('express');
-const router = express.Router();
-
 const walletController = require('../controllers/walletController');
 const moneyController = require('../controllers/moneyController');
 const { requireAuth } = require('../middleware/auth');
+const { moneyLimiter, readLimiter, writeLimiter } = require('../middleware/rateLimiter');
+const idempotency = require('../middleware/idempotency');
 const validate = require('../middleware/validate');
+const v = require('../middleware/validators');
 
-const {
-    uuidParam,
-    amount,
-    currency,
-    body,
-    query,
-} = require('../middleware/validators');
+const router = express.Router();
+router.use(requireAuth);
 
-router.post(
-    '/',
-    requireAuth,
-    currency,
-    validate,
-    walletController.createWallet,
-);
-
-router.get('/', requireAuth, walletController.myWallets);
-
+router.post('/', ...writeLimiter, v.currency, validate, walletController.createWallet);
+router.get('/', ...readLimiter, walletController.myWallets);
+router.get('/:id', ...readLimiter, v.uuidParam('id'), validate, walletController.getWallet);
+router.get('/:id/balance', ...readLimiter, v.uuidParam('id'), validate, walletController.getBalance);
 router.get(
-    '/:id',
-    requireAuth,
-    uuidParam('id'),
-    validate,
-    walletController.getWallet,
+  '/:id/transactions',
+  ...readLimiter,
+  [v.uuidParam('id'), ...v.pagination, v.transactionType],
+  validate,
+  walletController.getTransactions,
 );
 
-router.get(
-    '/:id/balance',
-    requireAuth,
-    uuidParam('id'),
-    validate,
-    walletController.getBalance,
-);
+const gatewayValidators = [v.uuidParam('id'), v.amount('amount'), v.provider, v.description];
 
-router.get(
-    '/:id/transactions',
-    requireAuth,
-    [
-        uuidParam('id'),
-        query('limit')
-            .optional()
-            .isInt({ min: 1, max: 100 })
-            .toInt()
-            .withMessage('Limit must be between 1 and 100'),
-
-        query('offset')
-            .optional()
-            .isInt({ min: 0 })
-            .toInt()
-            .withMessage('Offset must be a non-negative integer'),
-    ],
-    validate,
-    walletController.getTransactions,
-);
-
-router.post(
-    '/:id/top-up',
-    requireAuth,
-    [
-        uuidParam('id'),
-        amount('amount'),
-
-        body('provider')
-            .optional()
-            .trim()
-            .isLength({ min: 1, max: 50 })
-            .matches(/^[a-zA-Z0-9_-]+$/)
-            .withMessage('Invalid payment provider'),
-
-        body('description')
-            .optional()
-            .trim()
-            .isLength({ max: 500 })
-            .withMessage('Description is too long'),
-    ],
-    validate,
-    moneyController.topUp,
-);
-
-router.post(
-    '/:id/withdraw',
-    requireAuth,
-    [
-        uuidParam('id'),
-        amount('amount'),
-
-        body('provider')
-            .optional()
-            .trim()
-            .isLength({ min: 1, max: 50 })
-            .matches(/^[a-zA-Z0-9_-]+$/)
-            .withMessage('Invalid payment provider'),
-
-        body('description')
-            .optional()
-            .trim()
-            .isLength({ max: 500 })
-            .withMessage('Description is too long'),
-    ],
-    validate,
-    moneyController.withdraw,
-);
+router.post('/:id/top-up', ...moneyLimiter, gatewayValidators, validate, idempotency, moneyController.topUp);
+router.post('/:id/withdraw', ...moneyLimiter, gatewayValidators, validate, idempotency, moneyController.withdraw);
 
 module.exports = router;

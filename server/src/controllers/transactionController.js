@@ -1,22 +1,26 @@
-const transactionModel = require("../models/transactionModel");
-const walletModel = require("../models/walletModel");
+const transactionModel = require('../models/transactionModel');
+const walletModel = require('../models/walletModel');
+const { ApiError } = require('../lib/errors');
 
+/**
+ * Transaction history for one of the caller's wallets (the primary wallet
+ * unless `walletId` is given), newest first, with limit/offset pagination and
+ * an optional `type` filter.
+ */
 const getHistory = async (req, res, next) => {
   try {
-    const { limit = 10, offset = 0 } = req.query;
-    
-    // Find the user's wallet to get transactions
+    const { limit = 20, offset = 0, type = null, walletId } = req.validated;
     const wallets = await walletModel.listByUser(req.user.sub);
-    if (!wallets || wallets.length === 0) {
-      return res.status(404).json({ success: false, error: "Wallet not found for this user" });
-    }
-    const wallet = wallets[0]; // Get the primary wallet
+    const wallet = walletId ? wallets.find((w) => w.id === walletId) : wallets[0];
+    if (!wallet) throw new ApiError('Wallet not found', 404);
 
-    const transactions = await transactionModel.listByWallet(wallet.id, limit, offset);
-    
-    res.json({ success: true, count: transactions.length, data: transactions });
-  } catch (e) {
-    next(e);
+    const [rows, total] = await Promise.all([
+      transactionModel.listByWallet(wallet.id, { limit, offset, type }),
+      transactionModel.countByWallet(wallet.id, type),
+    ]);
+    return res.json({ success: true, count: rows.length, total, limit, offset, walletId: wallet.id, data: rows });
+  } catch (error) {
+    return next(error);
   }
 };
 
