@@ -1,0 +1,56 @@
+name: OWASP ZAP baseline
+
+# Passive OWASP ZAP baseline scan of staging. Runs after each successful
+# staging deploy, weekly, and on demand. Fails on any High-risk alert and
+# lists Medium alerts in the job summary. The HTML report is kept as an artifact.
+on:
+  workflow_run:
+    workflows: ["payNEXT CI/CD"]
+    branches: [main]
+    types: [completed]
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zap:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      DOMAIN: ${{ secrets.DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check target
+        id: target
+        run: |
+          if [ -z "$DOMAIN" ]; then
+            echo "::warning::ZAP scan skipped: the staging environment has no DOMAIN secret"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run ZAP baseline
+        if: steps.target.outputs.ready == 'true'
+        run: |
+          mkdir -p zap-report && chmod 777 zap-report
+          docker run --rm -v "$PWD/zap-report:/zap/wrk:rw" -v "$PWD/.zap:/zap/config:ro" \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t "https://${DOMAIN}" -c /zap/config/rules.tsv -j -I \
+            -J report.json -r report.html -w report.md
+
+      - name: Evaluate findings
+        if: steps.target.outputs.ready == 'true'
+        run: python3 .zap/evaluate.py zap-report/report.json >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.target.outputs.ready == 'true'
+        with:
+          name: zap-baseline-report
+          path: zap-report
+          retention-days: 30
