@@ -1,544 +1,298 @@
 /**
- * payNEXT Dashboard View Controller
- * Manages user profile, token verification, wallet balance, top-up, money transfers, and transaction history.
+ * Dashboard view: profile, wallet balance, top-up, transfers and history.
+ * Markup lives in index.html (#dashboard-view). Every successful money
+ * movement re-fetches the wallet and history from the server, so the balance
+ * on screen is always the server's balance.
  */
-
 let activeWallet = null;
 
-function renderDashboard() {
-  // If invoked dynamically, returns the main container markup
-  const existing = document.getElementById("dashboard-view");
-  return existing ? existing.innerHTML : "";
+const CREDIT_TYPES = new Set(["top_up", "transfer_in", "request_in", "adjustment_credit"]);
+const TYPE_LABELS = {
+  top_up: "Top up",
+  withdrawal: "Withdrawal",
+  transfer_in: "Transfer in",
+  transfer_out: "Transfer out",
+  request_in: "Request received",
+  request_out: "Request paid",
+  merchant_payment: "Merchant payment",
+  adjustment_credit: "Adjustment (credit)",
+  adjustment_debit: "Adjustment (debit)",
+};
+const AMOUNT_RULE = /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/;
+
+/** Validate an amount typed by the user; returns a canonical string or null. */
+function parseAmountInput(raw) {
+  const text = String(raw || "").trim();
+  if (!AMOUNT_RULE.test(text) || !/[1-9]/.test(text)) return null;
+  return text;
 }
 
-function showDashboardError(text) {
-  if (typeof showToast === "function") {
-    showToast(text, "error");
+/** Integer cents from a decimal string, for exact client-side comparisons. */
+function toCents(value) {
+  const [whole, fraction = ""] = String(value || "0").split(".");
+  return Number(whole) * 100 + Number(fraction.padEnd(2, "0").slice(0, 2));
+}
+
+function formatMoney(amount, currency = "USD") {
+  const value = Number(amount);
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(Number.isFinite(value) ? value : 0);
+  } catch {
+    return `${(Number.isFinite(value) ? value : 0).toFixed(2)} ${currency}`;
   }
 }
 
-/**
- * Format currency amount
- */
-function formatCurrency(amount, currency = "USD") {
-  const num = Number(amount);
-  const formatted = isNaN(num) ? "0.00" : num.toFixed(2);
-  return `$${formatted} ${currency}`;
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
 }
 
-/**
- * Escape HTML to prevent injection
- */
-function escapeHtml(str) {
-  if (!str) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-/**
- * Render user profile fields
- */
 function renderUserProfile(user) {
   if (!user) return;
-  const nameEl = document.getElementById("dash-user-name");
-  const emailEl = document.getElementById("dash-user-email");
-  const roleEl = document.getElementById("dash-user-role");
-  const phoneEl = document.getElementById("dash-user-phone");
-  const idEl = document.getElementById("dash-user-id");
-
-  const displayName = user.fullName || user.full_name || user.name || user.email || "payNEXT User";
-  if (nameEl) nameEl.textContent = displayName;
-  if (emailEl) emailEl.textContent = user.email || "N/A";
-  if (roleEl) roleEl.textContent = (user.role || "user").toUpperCase();
-  if (phoneEl) phoneEl.textContent = user.phone || "None provided";
-  if (idEl) idEl.textContent = user.id ? `UID-${user.id}` : "N/A";
+  setText("dash-user-name", user.full_name || user.fullName || user.email || "payNEXT user");
+  setText("dash-user-email", user.email || "N/A");
+  setText("dash-user-role", (user.role || "user").toUpperCase());
+  setText("dash-user-phone", user.phone || "Not provided");
+  setText("dash-user-since", user.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A");
 }
 
-/**
- * Render token preview card
- */
-function renderTokenSecurity() {
-  const token = typeof Auth !== "undefined" && Auth.getToken ? Auth.getToken() : null;
-  const tokenPreviewEl = document.getElementById("dash-token-preview");
-  if (!tokenPreviewEl) return;
-
-  if (token) {
-    const parts = token.split(".");
-    if (parts.length === 3) {
-      tokenPreviewEl.textContent = `${parts[0]}.${parts[1].substring(0, 15)}...[PROTECTED_SIGNATURE]`;
-    } else {
-      tokenPreviewEl.textContent = token.substring(0, 30) + "...";
-    }
-  } else {
-    tokenPreviewEl.textContent = "No active Bearer token found.";
+function renderWallet(wallet) {
+  if (!wallet) return;
+  setText("dash-wallet-number", wallet.wallet_number);
+  setText("dash-wallet-balance", formatMoney(wallet.balance, wallet.currency));
+  const status = document.getElementById("dash-wallet-status");
+  if (status) {
+    status.textContent = (wallet.status || "active").toUpperCase();
+    status.className = `badge ${wallet.status === "active" ? "badge-success" : "badge-rose"}`;
   }
+  document.querySelectorAll(".currency-label").forEach((el) => {
+    el.textContent = wallet.currency;
+  });
 }
 
-/**
- * Load user's wallets and balance
- */
 async function loadWallets() {
-  const walletNumEl = document.getElementById("dash-wallet-number");
-  const balanceEl = document.getElementById("dash-wallet-balance");
-
   try {
-    const wallets = await apiRequest("/wallets");
-
+    let wallets = await apiRequest("/wallets");
     if (!Array.isArray(wallets) || wallets.length === 0) {
-      // If no wallet exists yet, create default USD wallet
-      try {
-        const newWallet = await apiRequest("/wallets", {
-          method: "POST",
-          body: JSON.stringify({ currency: "USD" }),
-        });
-        activeWallet = newWallet;
-      } catch (err) {
-        console.warn("Wallet creation attempt:", err);
-      }
-    } else {
-      activeWallet = wallets[0];
+      const created = await apiRequest("/wallets", { method: "POST", body: JSON.stringify({ currency: "USD" }) });
+      wallets = created ? [created] : [];
     }
-
-    if (activeWallet) {
-      localStorage.setItem("paynext_wallet", JSON.stringify(activeWallet));
-      if (walletNumEl) {
-        walletNumEl.textContent = activeWallet.wallet_number || "PAYNX-ACTIVE";
-      }
-      if (balanceEl) {
-        balanceEl.innerHTML = `${formatCurrency(activeWallet.balance, activeWallet.currency)}`;
-      }
-    }
-
+    activeWallet = wallets.find((w) => w.status === "active") || wallets[0] || null;
+    renderWallet(activeWallet);
     return activeWallet;
   } catch (error) {
-    console.error("Failed to load wallets:", error);
-    if (typeof showToast === "function") {
-      showToast("Could not retrieve wallet balance: " + error.message, "error");
-    }
+    setText("dash-wallet-balance", "Unavailable");
+    showToast(`Could not load your wallet: ${error.message}`, "error");
     return null;
   }
 }
 
-/**
- * Load transaction history for the user's wallet
- */
-async function loadTransactions(walletId) {
+function transactionRow(tx) {
+  const type = String(tx.type || "").toLowerCase();
+  const isCredit = CREDIT_TYPES.has(type);
+  const item = document.createElement("div");
+  item.className = "tx-item";
+
+  const left = document.createElement("div");
+  left.className = "tx-left";
+  const icon = document.createElement("div");
+  icon.className = `tx-icon ${isCredit ? "tx-icon-in" : "tx-icon-out"}`;
+  icon.textContent = isCredit ? "↓" : "↑";
+  const meta = document.createElement("div");
+  meta.className = "tx-meta";
+  const desc = document.createElement("div");
+  desc.className = "tx-desc";
+  desc.textContent = tx.description || TYPE_LABELS[type] || type;
+  const date = document.createElement("div");
+  date.className = "tx-date";
+  date.textContent = `${tx.created_at ? new Date(tx.created_at).toLocaleString() : ""} • `;
+  const badge = document.createElement("span");
+  badge.className = `badge ${isCredit ? "badge-success" : "badge-rose"}`;
+  badge.textContent = (TYPE_LABELS[type] || type).toUpperCase();
+  date.appendChild(badge);
+  meta.append(desc, date);
+  left.append(icon, meta);
+
+  const right = document.createElement("div");
+  right.className = "tx-right";
+  const amount = document.createElement("div");
+  amount.className = `tx-amount ${isCredit ? "positive" : "negative"}`;
+  amount.textContent = `${isCredit ? "+" : "-"}${formatMoney(tx.amount, tx.currency)}`;
+  right.appendChild(amount);
+  if (tx.balance_after !== undefined && tx.balance_after !== null) {
+    const after = document.createElement("div");
+    after.className = "tx-balance";
+    after.textContent = `Balance: ${formatMoney(tx.balance_after, tx.currency)}`;
+    right.appendChild(after);
+  }
+
+  item.append(left, right);
+  return item;
+}
+
+function renderEmptyHistory(container, message, isError = false) {
+  const box = document.createElement("div");
+  box.className = "tx-empty";
+  if (isError) box.classList.add("tx-error");
+  box.textContent = message;
+  container.replaceChildren(box);
+}
+
+async function loadTransactions() {
   const container = document.getElementById("transactions-container");
-  if (!container) return;
-
+  if (!container || !activeWallet) return;
+  renderEmptyHistory(container, "Loading transaction history...");
   try {
-    let transactions = [];
-    try {
-      transactions = await apiRequest("/history?limit=20&offset=0");
-    } catch {
-      if (walletId) {
-        transactions = await apiRequest(`/wallets/${walletId}/transactions?limit=20&offset=0`);
-      }
-    }
-
+    const transactions = await apiRequest(`/history?limit=20&offset=0&walletId=${encodeURIComponent(activeWallet.id)}`);
     if (!Array.isArray(transactions) || transactions.length === 0) {
-      container.innerHTML = `
-        <div class="tx-empty">
-          <p>No transactions found.</p>
-          <p style="font-size: 13px; color: var(--text-dim); margin-top: 6px;">
-            Top up your wallet or transfer funds to see activity here.
-          </p>
-        </div>
-      `;
+      renderEmptyHistory(container, "No transactions yet. Top up your wallet or send money to see activity here.");
       return;
     }
-
     const list = document.createElement("div");
     list.className = "tx-list";
-
-    transactions.forEach((tx) => {
-      const item = document.createElement("div");
-      item.className = "tx-item";
-
-      const type = (tx.type || "").toLowerCase();
-      const isPositive = type === "top_up" || type === "transfer_in" || type === "credit";
-      const iconClass = isPositive ? "tx-icon-in" : "tx-icon-out";
-      const iconSymbol = isPositive ? "↓" : "↑";
-      const amountSign = isPositive ? "+" : "-";
-
-      const txTypeBadge = isPositive ? "badge-success" : "badge-rose";
-      const displayType = type.replace(/_/g, " ").toUpperCase();
-      const txAmount = Number(tx.amount || 0).toFixed(2);
-      const balanceAfter = tx.balance_after !== undefined && tx.balance_after !== null
-        ? `$${Number(tx.balance_after).toFixed(2)}`
-        : "";
-
-      const dateStr = tx.created_at ? new Date(tx.created_at).toLocaleString() : "Recent";
-      const desc = tx.description || `${displayType} transaction`;
-
-      item.innerHTML = `
-        <div class="tx-left">
-          <div class="tx-icon ${iconClass}">${iconSymbol}</div>
-          <div class="tx-meta">
-            <div class="tx-desc">${escapeHtml(desc)}</div>
-            <div class="tx-date">${escapeHtml(dateStr)} • <span class="badge ${txTypeBadge}">${escapeHtml(displayType)}</span></div>
-          </div>
-        </div>
-        <div class="tx-right">
-          <div class="tx-amount ${isPositive ? 'positive' : 'negative'}">${amountSign}$${txAmount}</div>
-          ${balanceAfter ? `<div class="tx-balance">Bal: ${escapeHtml(balanceAfter)}</div>` : ""}
-        </div>
-      `;
-      list.appendChild(item);
-    });
-
+    transactions.forEach((tx) => list.appendChild(transactionRow(tx)));
     container.replaceChildren(list);
   } catch (error) {
-    console.error("Failed to load transactions:", error);
-    container.innerHTML = `
-      <div class="tx-empty" style="color: var(--accent-rose);">
-        Unable to load transactions: ${escapeHtml(error.message)}
-      </div>
-    `;
+    renderEmptyHistory(container, `Unable to load transactions: ${error.message}`, true);
   }
 }
 
+async function refreshWalletAndHistory() {
+  await loadWallets();
+  await loadTransactions();
+}
+
 /**
- * Setup Top-Up Form Handler
+ * Bind a money form: validates, shows a loading state and inline errors, and
+ * re-fetches balance and history after a successful mutation.
  */
-function setupTopUpForm() {
-  const form = document.getElementById("topup-form");
+function bindMoneyForm({ formId, errorId, buttonId, loadingText, buildRequest, successMessage }) {
+  const form = document.getElementById(formId);
   if (!form || form.dataset.bound === "true") return;
   form.dataset.bound = "true";
+  const errorBox = document.getElementById(errorId);
+  const submitBtn = document.getElementById(buttonId);
 
-  const errorBox = document.getElementById("topup-error");
-  const submitBtn = document.getElementById("topup-submit-btn");
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    if (!activeWallet || !activeWallet.id) {
-      if (typeof showToast === "function") {
-        showToast("No active wallet found. Please refresh the page.", "error");
-      }
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!activeWallet) {
+      setFormError(errorBox, "No wallet loaded. Please refresh the page.");
       return;
     }
-
-    const amountInput = document.getElementById("topup-amount");
-    const providerSelect = document.getElementById("topup-provider");
-
-    const amount = Number(amountInput ? amountInput.value : 0);
-    const provider = providerSelect ? providerSelect.value : "mock";
-
-    if (!amount || amount <= 0) {
-      if (errorBox) {
-        errorBox.textContent = "Please enter an amount greater than $0.00.";
-        errorBox.style.display = "block";
-      }
-      if (typeof showToast === "function") {
-        showToast("Please enter an amount greater than $0.00.", "warning");
-      }
-      return;
-    }
-
-    if (errorBox) {
-      errorBox.style.display = "none";
-      errorBox.textContent = "";
-    }
-
-    if (typeof setButtonLoading === "function") {
-      setButtonLoading(submitBtn, true, "Confirm Top Up", "Processing Top Up...");
-    } else if (submitBtn) {
-      submitBtn.disabled = true;
-    }
-
+    let request;
     try {
-      await apiRequest(`/wallets/${activeWallet.id}/top-up`, {
-        method: "POST",
-        body: JSON.stringify({
-          amount,
-          provider,
-          description: `Top-up via ${provider}`,
-        }),
-      });
+      request = buildRequest();
+    } catch (validationError) {
+      setFormError(errorBox, validationError.message);
+      return;
+    }
 
-      if (typeof showToast === "function") {
-        showToast(`Top-up of $${amount.toFixed(2)} successful!`, "success");
-      }
+    setFormError(errorBox, "");
+    setButtonLoading(submitBtn, true, loadingText);
+    try {
+      await apiRequest(request.endpoint, { method: "POST", body: JSON.stringify(request.body) });
       form.reset();
-
-      // RE-FETCH WALLET BALANCE AND TRANSACTIONS AFTER SUCCESSFUL MUTATION
-      await loadWallets();
-      if (activeWallet && activeWallet.id) {
-        await loadTransactions(activeWallet.id);
-      }
+      showToast(successMessage(request.body), "success");
+      await refreshWalletAndHistory();
     } catch (error) {
-      const msg = error.message || "Top-up failed. Please try again.";
-      if (errorBox) {
-        errorBox.textContent = msg;
-        errorBox.style.display = "block";
-      }
-      if (typeof showToast === "function") {
-        showToast(msg, "error");
-      }
+      setFormError(errorBox, error.message);
+      showToast(error.message, "error");
+      if (error.status === 409 || error.status === 400) await loadWallets();
     } finally {
-      if (typeof setButtonLoading === "function") {
-        setButtonLoading(submitBtn, false, "Confirm Top Up");
-      } else if (submitBtn) {
-        submitBtn.disabled = false;
-      }
+      setButtonLoading(submitBtn, false);
     }
   });
 }
 
-/**
- * Setup Transfer (Send Money) Form Handler
- */
-function setupTransferForm() {
-  const form = document.getElementById("transfer-form");
-  if (!form || form.dataset.bound === "true") return;
-  form.dataset.bound = "true";
+function setupMoneyForms() {
+  bindMoneyForm({
+    formId: "topup-form",
+    errorId: "topup-error",
+    buttonId: "topup-submit-btn",
+    loadingText: "Processing top-up...",
+    buildRequest() {
+      const amount = parseAmountInput(document.getElementById("topup-amount").value);
+      if (!amount) throw new Error("Enter an amount greater than 0 with at most 2 decimal places.");
+      const provider = document.getElementById("topup-provider").value || "mock";
+      return { endpoint: `/wallets/${activeWallet.id}/top-up`, body: { amount, provider } };
+    },
+    successMessage: ({ amount }) => `Top-up of ${formatMoney(amount, activeWallet.currency)} successful.`,
+  });
 
-  const errorBox = document.getElementById("transfer-error");
-  const submitBtn = document.getElementById("transfer-submit-btn");
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    if (!activeWallet || !activeWallet.id) {
-      if (typeof showToast === "function") {
-        showToast("No active wallet found. Please refresh the page.", "error");
+  bindMoneyForm({
+    formId: "transfer-form",
+    errorId: "transfer-error",
+    buttonId: "transfer-submit-btn",
+    loadingText: "Sending...",
+    buildRequest() {
+      const toWalletNumber = document.getElementById("transfer-to-wallet").value.trim().toUpperCase();
+      const amount = parseAmountInput(document.getElementById("transfer-amount").value);
+      const note = document.getElementById("transfer-note").value.trim();
+      if (!/^PAYNX-\d{6}$/.test(toWalletNumber)) throw new Error("Recipient wallet number must look like PAYNX-123456.");
+      if (!amount) throw new Error("Enter an amount greater than 0 with at most 2 decimal places.");
+      if (toWalletNumber === activeWallet.wallet_number) throw new Error("You cannot send money to your own wallet.");
+      if (toCents(amount) > toCents(activeWallet.balance)) {
+        throw new Error(`Insufficient funds. Your balance is ${formatMoney(activeWallet.balance, activeWallet.currency)}.`);
       }
-      return;
-    }
-
-    const toWalletInput = document.getElementById("transfer-to-wallet");
-    const amountInput = document.getElementById("transfer-amount");
-    const noteInput = document.getElementById("transfer-note");
-
-    const toWalletNumber = toWalletInput ? toWalletInput.value.trim().toUpperCase() : "";
-    const amount = Number(amountInput ? amountInput.value : 0);
-    const note = noteInput ? noteInput.value.trim() : "";
-
-    if (!toWalletNumber || !amount || amount <= 0) {
-      const msg = "Please enter a valid recipient wallet number and amount.";
-      if (errorBox) {
-        errorBox.textContent = msg;
-        errorBox.style.display = "block";
-      }
-      if (typeof showToast === "function") {
-        showToast(msg, "warning");
-      }
-      return;
-    }
-
-    if (activeWallet.wallet_number && toWalletNumber === activeWallet.wallet_number) {
-      const msg = "You cannot send money to your own wallet.";
-      if (errorBox) {
-        errorBox.textContent = msg;
-        errorBox.style.display = "block";
-      }
-      if (typeof showToast === "function") {
-        showToast(msg, "warning");
-      }
-      return;
-    }
-
-    if (Number(activeWallet.balance) < amount) {
-      const msg = `Insufficient funds. Your current balance is $${Number(activeWallet.balance).toFixed(2)}.`;
-      if (errorBox) {
-        errorBox.textContent = msg;
-        errorBox.style.display = "block";
-      }
-      if (typeof showToast === "function") {
-        showToast(msg, "warning");
-      }
-      return;
-    }
-
-    if (errorBox) {
-      errorBox.style.display = "none";
-      errorBox.textContent = "";
-    }
-
-    if (typeof setButtonLoading === "function") {
-      setButtonLoading(submitBtn, true, "Send Money", "Sending Transfer...");
-    } else if (submitBtn) {
-      submitBtn.disabled = true;
-    }
-
-    try {
-      await apiRequest("/transfers", {
-        method: "POST",
-        body: JSON.stringify({
-          fromWalletId: activeWallet.id,
-          toWalletNumber,
-          amount,
-          note: note || undefined,
-        }),
-      });
-
-      if (typeof showToast === "function") {
-        showToast(`Successfully transferred $${amount.toFixed(2)} to ${toWalletNumber}!`, "success");
-      }
-      form.reset();
-
-      // RE-FETCH WALLET BALANCE AND TRANSACTIONS AFTER SUCCESSFUL MUTATION
-      await loadWallets();
-      if (activeWallet && activeWallet.id) {
-        await loadTransactions(activeWallet.id);
-      }
-    } catch (error) {
-      const msg = error.message || "Transfer failed. Please check the recipient wallet number.";
-      if (errorBox) {
-        errorBox.textContent = msg;
-        errorBox.style.display = "block";
-      }
-      if (typeof showToast === "function") {
-        showToast(msg, "error");
-      }
-    } finally {
-      if (typeof setButtonLoading === "function") {
-        setButtonLoading(submitBtn, false, "Send Money");
-      } else if (submitBtn) {
-        submitBtn.disabled = false;
-      }
-    }
+      return { endpoint: "/transfers", body: { fromWalletId: activeWallet.id, toWalletNumber, amount, ...(note ? { note } : {}) } };
+    },
+    successMessage: ({ amount, toWalletNumber }) => `Sent ${formatMoney(amount, activeWallet.currency)} to ${toWalletNumber}.`,
   });
 }
 
-/**
- * Setup Dashboard Action Buttons
- */
+function bindButton(id, handler) {
+  const btn = document.getElementById(id);
+  if (!btn || btn.dataset.bound === "true") return;
+  btn.dataset.bound = "true";
+  btn.addEventListener("click", handler);
+}
+
 function setupDashboardActions() {
-  const copyBtn = document.getElementById("copy-token-btn");
-  if (copyBtn && copyBtn.dataset.bound !== "true") {
-    copyBtn.dataset.bound = "true";
-    copyBtn.addEventListener("click", () => {
-      const token = typeof Auth !== "undefined" && Auth.getToken ? Auth.getToken() : null;
-      if (token && navigator.clipboard) {
-        navigator.clipboard.writeText(token).then(() => {
-          if (typeof showToast === "function") {
-            showToast("Bearer token copied to clipboard!", "success");
-          }
-        }).catch(() => {
-          if (typeof showToast === "function") {
-            showToast("Could not copy token automatically.", "warning");
-          }
-        });
-      }
-    });
-  }
+  const focusPanel = (panelId, inputId) => () => {
+    document.getElementById(panelId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById(inputId)?.focus();
+  };
+  bindButton("btn-toggle-topup", focusPanel("topup-panel", "topup-amount"));
+  bindButton("btn-toggle-transfer", focusPanel("transfer-panel", "transfer-to-wallet"));
 
-  const btnTopUp = document.getElementById("btn-toggle-topup");
-  if (btnTopUp && btnTopUp.dataset.bound !== "true") {
-    btnTopUp.dataset.bound = "true";
-    btnTopUp.addEventListener("click", () => {
-      const panel = document.getElementById("topup-panel");
-      const input = document.getElementById("topup-amount");
-      if (panel) {
-        panel.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-      if (input) input.focus();
-    });
-  }
-
-  const btnTransfer = document.getElementById("btn-toggle-transfer");
-  if (btnTransfer && btnTransfer.dataset.bound !== "true") {
-    btnTransfer.dataset.bound = "true";
-    btnTransfer.addEventListener("click", () => {
-      const panel = document.getElementById("transfer-panel");
-      const input = document.getElementById("transfer-to-wallet");
-      if (panel) {
-        panel.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-      if (input) input.focus();
-    });
-  }
-
-  const btnRefresh = document.getElementById("btn-refresh-wallet");
-  if (btnRefresh && btnRefresh.dataset.bound !== "true") {
-    btnRefresh.dataset.bound = "true";
-    btnRefresh.addEventListener("click", async () => {
-      btnRefresh.disabled = true;
-      try {
-        await loadWallets();
-        if (activeWallet && activeWallet.id) {
-          await loadTransactions(activeWallet.id);
-        }
-        if (typeof showToast === "function") {
-          showToast("Wallet data updated.", "info");
-        }
-      } finally {
-        btnRefresh.disabled = false;
-      }
-    });
-  }
-
-  const btnRefreshHistory = document.getElementById("btn-refresh-history");
-  if (btnRefreshHistory && btnRefreshHistory.dataset.bound !== "true") {
-    btnRefreshHistory.dataset.bound = "true";
-    btnRefreshHistory.addEventListener("click", async () => {
-      btnRefreshHistory.disabled = true;
-      try {
-        if (activeWallet && activeWallet.id) {
-          await loadTransactions(activeWallet.id);
-        }
-        if (typeof showToast === "function") {
-          showToast("Transaction history updated.", "info");
-        }
-      } finally {
-        btnRefreshHistory.disabled = false;
-      }
-    });
-  }
+  const withLoading = (id, text, work) => async () => {
+    const btn = document.getElementById(id);
+    setButtonLoading(btn, true, text);
+    try {
+      await work();
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  };
+  bindButton("btn-refresh-wallet", withLoading("btn-refresh-wallet", "Refreshing...", refreshWalletAndHistory));
+  bindButton("btn-refresh-history", withLoading("btn-refresh-history", "Refreshing...", loadTransactions));
+  bindButton("btn-copy-wallet", async () => {
+    if (!activeWallet || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(activeWallet.wallet_number);
+      showToast("Wallet number copied.", "success");
+    } catch {
+      showToast("Could not copy the wallet number.", "warning");
+    }
+  });
 }
 
-/**
- * Initialize Dashboard View
- */
 async function initDashboard() {
-  if (typeof Auth === "undefined" || !Auth.isAuthenticated()) {
-    if (typeof showToast === "function") {
-      showToast("Please log in to access your dashboard.", "info");
-    }
+  if (!Auth.isAuthenticated()) {
     window.location.hash = "#/login";
     return;
   }
-
-  // 1. Render cached user profile immediately
-  const cachedUser = Auth.getUser();
-  if (cachedUser) {
-    renderUserProfile(cachedUser);
-  }
-
-  // 2. Render token security
-  renderTokenSecurity();
-
-  // 3. Setup form handlers and buttons
-  setupTopUpForm();
-  setupTransferForm();
+  renderUserProfile(Auth.getUser());
+  setupMoneyForms();
   setupDashboardActions();
 
-  // 4. Fetch fresh user profile in background
   try {
-    const freshUser = await Auth.fetchMe();
-    if (freshUser) {
-      renderUserProfile(freshUser);
-    }
-  } catch (err) {
-    console.warn("Could not fetch fresh user profile:", err);
+    renderUserProfile(await Auth.fetchMe());
+  } catch (error) {
+    if (error.status !== 401) showToast(`Could not refresh your profile: ${error.message}`, "warning");
   }
-
-  // 5. Load wallet & balance
-  const wallet = await loadWallets();
-
-  // 6. Load transactions
-  if (wallet && wallet.id) {
-    await loadTransactions(wallet.id);
-  }
+  if (!Auth.isAuthenticated()) return;
+  await refreshWalletAndHistory();
 }
 
-window.renderDashboard = renderDashboard;
 window.initDashboard = initDashboard;
-window.loadWallets = loadWallets;
-window.loadTransactions = loadTransactions;

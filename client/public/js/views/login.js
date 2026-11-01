@@ -1,130 +1,40 @@
 /**
- * payNEXT Login View Controller
+ * Login view. Markup lives in index.html (#login-view); this binds behaviour.
  */
-
-function renderLogin() {
-  return `
-    <div class="auth-container">
-      <div class="card">
-        <div class="auth-header">
-          <h2>Welcome Back</h2>
-          <p>Sign in to your payNEXT digital wallet</p>
-        </div>
-
-        <div id="login-error" class="form-error-banner" style="display: none;"></div>
-
-        <form id="login-form">
-          <div class="form-group">
-            <label for="login-email">Email Address</label>
-            <input
-              type="email"
-              id="login-email"
-              name="email"
-              class="form-control"
-              placeholder="name@example.com"
-              required
-              autocomplete="email"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="login-password">Password</label>
-            <input
-              type="password"
-              id="login-password"
-              name="password"
-              class="form-control"
-              placeholder="••••••••"
-              required
-              autocomplete="current-password"
-            />
-          </div>
-
-          <button type="submit" class="btn btn-primary" id="login-submit-btn" style="width: 100%; margin-top: 8px;">
-            Sign In
-          </button>
-        </form>
-
-        <div class="auth-footer-text">
-          Don't have an account? <a href="#/register">Create Account</a>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
 function initLogin() {
   const form = document.getElementById("login-form");
-  if (!form) return;
-
-  // Clear previous errors when initializing
   const errorBox = document.getElementById("login-error");
-  if (errorBox) {
-    errorBox.style.display = "none";
-    errorBox.textContent = "";
-  }
-
-  // Prevent multiple bindings
+  if (!form) return;
+  setFormError(errorBox, "");
   if (form.dataset.bound === "true") return;
   form.dataset.bound = "true";
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-
-    const submitBtn = document.getElementById("login-submit-btn") || form.querySelector('button[type="submit"]');
-    const emailInput = document.getElementById("login-email") || form.elements.email;
-    const passwordInput = document.getElementById("login-password") || form.elements.password;
-
-    const email = emailInput ? emailInput.value.trim() : "";
-    const password = passwordInput ? passwordInput.value : "";
+    const submitBtn = document.getElementById("login-submit-btn");
+    const email = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
 
     if (!email || !password) {
-      if (errorBox) {
-        errorBox.textContent = "Please enter both email and password.";
-        errorBox.style.display = "block";
-      }
-      if (typeof showToast === "function") {
-        showToast("Please enter both email and password.", "warning");
-      }
+      setFormError(errorBox, "Please enter both email and password.");
       return;
     }
 
-    if (errorBox) {
-      errorBox.style.display = "none";
-      errorBox.textContent = "";
-    }
-
-    if (typeof setButtonLoading === "function") {
-      setButtonLoading(submitBtn, true, "Sign In", "Signing in...");
-    } else if (submitBtn) {
-      submitBtn.disabled = true;
-    }
-
+    setFormError(errorBox, "");
+    setButtonLoading(submitBtn, true, "Signing in...");
     try {
       await Auth.login(email, password);
-      if (typeof showToast === "function") {
-        showToast("Welcome back! Login successful.", "success");
-      }
       form.reset();
+      showToast("Welcome back!", "success");
       window.location.hash = "#/dashboard";
     } catch (error) {
-      const msg = error.message || "Login failed. Please check your credentials.";
-      if (errorBox) {
-        errorBox.textContent = msg;
-        errorBox.style.display = "block";
-      }
-      if (typeof showToast === "function") {
-        showToast(msg, "error");
-      }
+      const message = error.message || "Sign in failed. Please check your details.";
+      setFormError(errorBox, message);
+      showToast(message, "error");
     } finally {
-      if (typeof setButtonLoading === "function") {
-        setButtonLoading(submitBtn, false, "Sign In");
-      } else if (submitBtn) {
-        submitBtn.disabled = false;
-      }
+      setButtonLoading(submitBtn, false);
     }
   });
 }
 
-window.renderLogin = renderLogin;
 window.initLogin = initLogin;

@@ -772,3 +772,11 @@ footer {
     right: 20px;
   }
 }
+
+.tx-error {
+  color: var(--accent-rose);
+}
+
+button[aria-busy="true"] {
+  cursor: progress;
+}
