@@ -1,57 +1,66 @@
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const config = require('./config/env');
 const routes = require('./routes');
+const requestContext = require('./middleware/requestContext');
 const errorHandler = require('./middleware/errorHandler');
+const { ApiError } = require('./lib/errors');
+const { register: metricsRegistry } = require('./observability/metrics');
 
 const app = express();
 
-// 1. TRUST PROXY (CRITICAL)
-// Tells Express to trust the first proxy (Caddy/Cloudflare).
-// This ensures rate limiting and logging use the real client IP, not the Docker/Cloudflare IP.
-app.set('trust proxy', 1);
+// Caddy is the single trusted hop in front of the API, so req.ip is the real
+// client address used by rate limiting and audit logging.
+app.set('trust proxy', config.trustProxy);
+app.disable('x-powered-by');
 
-// 2. SECURITY HEADERS
-// Must be near the top to protect all subsequent routes
+app.use(requestContext);
 app.use(helmet());
 
-// 3. CORS CONFIGURATION
-// Driven by ALLOWED_ORIGINS env var. Defaults to closed in production.
-const rawOrigins = process.env.ALLOWED_ORIGINS || '';
-const allowedOrigins = rawOrigins.trim()
-  ? rawOrigins.split(',').map((o) => o.trim()).filter(Boolean)
-  : process.env.NODE_ENV === 'production'
-    ? [] // Closed by default in production
-    : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:80'];
-
+const allowedOrigins = new Set(config.cors.allowedOrigins);
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error('Not allowed by CORS'));
+    origin(origin, callback) {
+      // Same-origin requests and non-browser clients send no Origin header.
+      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      return callback(new ApiError('Origin not allowed by CORS policy', 403));
     },
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id'],
+    exposedHeaders: ['X-Request-Id', 'Idempotent-Replayed', 'RateLimit', 'RateLimit-Policy', 'Retry-After'],
+    maxAge: 600,
   }),
 );
 
-// 4. BODY PARSERS
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '20kb' }));
+app.use(express.urlencoded({ extended: false, limit: '20kb' }));
+app.use(cookieParser());
 
-// 5. ROUTES
-// All /api/v1/* requests go here
+// Liveness: the process is up. Readiness (with a DB check) is /api/v1/health.
+app.get('/healthz', (req, res) => res.json({ success: true, status: 'ok' }));
+
+// Prometheus scrape endpoint. It is not routed by Caddy (only /api/* is), so it
+// is reachable only on the internal Docker network. An optional bearer token
+// adds defence in depth.
+if (config.metrics.enabled) {
+  app.get('/metrics', async (req, res, next) => {
+    try {
+      if (config.metrics.token && req.get('Authorization') !== `Bearer ${config.metrics.token}`) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+      }
+      res.set('Content-Type', metricsRegistry.contentType);
+      return res.send(await metricsRegistry.metrics());
+    } catch (error) {
+      return next(error);
+    }
+  });
+}
+
 app.use('/api/v1', routes);
 
-// 6. 404 NOT FOUND HANDLER
-// Must be placed AFTER all valid routes.
-app.use((req, res) =>
-  res.status(404).json({ success: false, error: 'Route not found' }),
-);
-
-// 7. GLOBAL ERROR HANDLER
-// Must ALWAYS be the very last middleware.
+app.use((req, res) => res.status(404).json({ success: false, error: 'Route not found' }));
 app.use(errorHandler);
 
 module.exports = app;
