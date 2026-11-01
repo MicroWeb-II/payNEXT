@@ -10,7 +10,14 @@
 set -euo pipefail
 
 backup_dir="${BACKUP_DIR:-./backups}"
-dump="${1:-$(ls -1t "$backup_dir"/daily/*.dump 2>/dev/null | head -n 1 || true)}"
+dump="${1:-}"
+if [[ -z "$dump" ]]; then
+  # Dump names embed a UTC timestamp, so the last one in glob order is newest.
+  shopt -s nullglob
+  dumps=("$backup_dir"/daily/*.dump)
+  shopt -u nullglob
+  (( ${#dumps[@]} )) && dump="${dumps[-1]}"
+fi
 if [[ -z "$dump" || ! -f "$dump" ]]; then
   echo "No backup dump found (looked in $backup_dir/daily)." >&2
   exit 1
