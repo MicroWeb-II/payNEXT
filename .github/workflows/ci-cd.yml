@@ -201,7 +201,13 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker push "${{ steps.meta.outputs.ref }}"
+          # GHCR occasionally answers "unknown blob" mid-push; retry with backoff.
+          for attempt in 1 2 3 4; do
+            docker push "${{ steps.meta.outputs.ref }}" && break
+            [ "$attempt" -eq 4 ] && exit 1
+            echo "::warning::push attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
           echo "Published \`${{ steps.meta.outputs.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
 
   deploy-staging:
