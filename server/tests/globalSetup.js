@@ -1,6 +1,11 @@
 module.exports = async () => {
-  const pool = require("../src/config/db");
-  const migrate = require("../src/migrate");
-  await migrate();
-  await pool.end();
+  process.env.NODE_ENV = 'test';
+  process.env.LOG_LEVEL ||= 'silent';
+  const pool = require('../src/config/db');
+  const migrate = require('../src/migrate');
+  try {
+    await migrate();
+  } finally {
+    await pool.end();
+  }
 };
